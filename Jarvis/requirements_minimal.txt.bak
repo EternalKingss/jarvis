@@ -1,0 +1,23 @@
+# Core dependencies only - minimal version to avoid conflicts
+openai
+psutil
+requests
+SpeechRecognition
+pygame
+pyperclip
+pyautogui
+pyaudio
+cryptography
+
+# Optional but recommended
+googletrans==4.0.0-rc1
+pywhatkit
+netifaces
+wikipedia-api
+pytesseract
+Pillow
+pydub
+
+# For Windows
+winshell
+python-vlc

@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Setup script for Jarvis API keys."""
+
+import os
+import sys
+import getpass
+from config.config_loader import ConfigManager
+
+def setup_api_keys():
+    """Interactive setup for API keys."""
+    print("=== Jarvis API Key Setup ===\n")
+    
+    # Load config
+    config = ConfigManager()
+    
+    print("This script will help you set up your API keys for Jarvis.\n")
+    
+    # OpenAI API Key
+    print("1. OpenAI API Key (required for core functionality)")
+    print("   Get your key from: https://platform.openai.com/api-keys")
+    current_key = config.get("API_KEYS", "openai", "")
+    if current_key:
+        print(f"   Current key: {current_key[:8]}...{current_key[-4:]}")
+        update = input("   Update this key? (y/n): ").lower() == 'y'
+    else:
+        print("   No key set")
+        update = True
+    
+    if update:
+        api_key = getpass.getpass("   Enter OpenAI API key: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 ")
+        if api_key:
+            config.set("API_KEYS", "openai", api_key)
+            print("   ✓ OpenAI API key saved")
+    
+    # YouTube API Key (optional)
+    print("\n2. YouTube API Key (optional - for music playback)")
+    print("   Get your key from: https://console.cloud.google.com/")
+    current_key = config.get("API_KEYS", "youtube", "")
+    if current_key:
+        print(f"   Current key: {current_key[:8]}...{current_key[-4:]}")
+        update = input("   Update this key? (y/n): ").lower() == 'y'
+    else:
+        print("   No key set")
+        update = input("   Add YouTube API key? (y/n): ").lower() == 'y'
+    
+    if update:
+        api_key = getpass.getpass("   Enter YouTube API key:AIzaSyCPanGVxYMlPDIbyKzkiRe8lyCWbNShEug")
+        if api_key:
+            config.set("API_KEYS", "youtube", api_key)
+            print("   ✓ YouTube API key saved")
+    
+    # ElevenLabs API Key (optional)
+    print("\n3. ElevenLabs API Key (optional - for advanced voice synthesis)")
+    print("   Get your key from: https://elevenlabs.io/")
+    current_key = config.get("API_KEYS", "elevenlabs", "")
+    if current_key:
+        print(f"   Current key: {current_key[:8]}...{current_key[-4:]}")
+        update = input("   Update this key? (y/n): ").lower() == 'y'
+    else:
+        print("   No key set")
+        update = input("   Add ElevenLabs API key? (y/n): ").lower() == 'y'
+    
+    if update:
+        api_key = getpass.getpass("   Enter ElevenLabs API key: ")
+        if api_key:
+            config.set("API_KEYS", "elevenlabs", api_key)
+            config.set("ELEVENLABS", "enabled", "True")
+            print("   ✓ ElevenLabs API key saved and enabled")
+    
+    # Save configuration
+    config.save_config()
+    print("\n✅ Configuration saved to jarvis_config.ini")
+    
+    # Test OpenAI connection
+    print("\nTesting OpenAI connection...")
+    test_openai_key = config.get("API_KEYS", "openai", "")
+    if test_openai_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=test_openai_key)
+            # Try a simple completion
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Say 'Hello'"}],
+                max_tokens=10
+            )
+            print("✓ OpenAI API key is valid and working!")
+        except Exception as e:
+            print(f"✗ OpenAI API key test failed: {e}")
+            print("  Please check your API key and try again.")
+    else:
+        print("✗ No OpenAI API key set")
+    
+    print("\n=== Setup Complete ===")
+    print("You can now run: python main.py")
+
+if __name__ == "__main__":
+    setup_api_keys()
