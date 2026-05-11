@@ -18,10 +18,19 @@ logger = logging.getLogger(__name__)
 LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "command_history.log")
 
 
+LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
 def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> None:
-    """Append executed command to history log."""
+    """Append executed command to history log. Rotates at 5 MB."""
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
+        # Rotate if over size limit
+        if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) >= LOG_MAX_BYTES:
+            bak = LOG_FILE + ".bak"
+            if os.path.exists(bak):
+                os.remove(bak)
+            os.rename(LOG_FILE, bak)
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"[{ts}] [{shell}] [{exit_code}] {command}  (cwd: {working_dir})\n")
     except Exception as e:

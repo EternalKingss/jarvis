@@ -1,21 +1,35 @@
-# Core MCP framework
+# ── Core MCP framework ────────────────────────────────────────────────────────
 mcp[cli]>=1.0.0
 
-# Input validation
+# ── Input validation ──────────────────────────────────────────────────────────
 pydantic>=2.0.0
 
-# System info and process management
+# ── System info and process management ───────────────────────────────────────
 psutil>=5.9.0
 
-# Clipboard access (optional fallback — PowerShell works without this)
+# ── Clipboard access (fallback to PowerShell if unavailable) ─────────────────
 pyperclip>=1.8.2
 
-# Screenshot and screen capture
+# ── Screenshot and screen capture ────────────────────────────────────────────
 Pillow>=10.0.0
 
-# OCR — requires Tesseract installed separately
+# ── OCR — requires Tesseract installed separately ────────────────────────────
 # Download: https://github.com/UB-Mannheim/tesseract/wiki
 pytesseract>=0.3.10
 
-# Environment variable loading (optional)
+# ── Environment variable loading ─────────────────────────────────────────────
 python-dotenv>=1.0.0
+
+# ── Named Pipe IPC bridge (Windows only) ─────────────────────────────────────
+pywin32>=306
+
+# ── Voice pipeline ────────────────────────────────────────────────────────────
+sounddevice>=0.4.6             # microphone capture
+vosk>=0.3.45                   # offline ASR + keyword spotting (auto-downloads model ~40 MB)
+numpy>=1.26.0                  # audio RMS calculation
+
+# ── Claude API (voice conversational AI) ─────────────────────────────────────
+anthropic>=0.30.0
+
+# ── ElevenLabs TTS (Jarvis speaks back) ──────────────────────────────────────
+elevenlabs>=1.5.0
