@@ -2,7 +2,7 @@
 """
 windows_mcp — Jarvis Windows OS Control MCP Server
 ====================================================
-Gives Claude full control over the Windows machine via 26 tools across:
+Gives Claude full control over the Windows machine via 32 tools across:
   - Terminal   : run any cmd/PowerShell command or script
   - Apps       : open, close, list, switch applications
   - System     : info, processes, volume, screenshot, shutdown/restart/lock
@@ -33,13 +33,6 @@ import tools.browser    # win_open_url, win_search_web
 import tools.media      # win_media_control
 import tools.clipboard  # win_get_clipboard, win_set_clipboard
 import tools.screen     # win_read_screen_text, win_get_active_window
-import tools.hud        # win_send_hud_message, win_trigger_hud_animation, win_get_voice_status
-
-# ── Bridge services (Named Pipe + Voice) — start before mcp.run() ───────────
-from bridge.pipe_server import pipe_server
-import bridge.voice  # registers command handlers and starts voice threads on import
-
-pipe_server.start()
 
 
 if __name__ == "__main__":

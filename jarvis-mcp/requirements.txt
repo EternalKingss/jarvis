@@ -19,17 +19,3 @@ pytesseract>=0.3.10
 
 # ── Environment variable loading ─────────────────────────────────────────────
 python-dotenv>=1.0.0
-
-# ── Named Pipe IPC bridge (Windows only) ─────────────────────────────────────
-pywin32>=306
-
-# ── Voice pipeline ────────────────────────────────────────────────────────────
-sounddevice>=0.4.6             # microphone capture
-vosk>=0.3.45                   # offline ASR + keyword spotting (auto-downloads model ~40 MB)
-numpy>=1.26.0                  # audio RMS calculation
-
-# ── Claude API (voice conversational AI) ─────────────────────────────────────
-anthropic>=0.30.0
-
-# ── ElevenLabs TTS (Jarvis speaks back) ──────────────────────────────────────
-elevenlabs>=1.5.0
