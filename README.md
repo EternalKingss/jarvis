@@ -1,5 +1,7 @@
 # Jarvis
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A Windows OS Control MCP Server for Claude Desktop. Gives Claude full control over your
 Windows machine — terminal, apps, files, system, browser, media, clipboard, and screen —
 via 32 tools over the Model Context Protocol.
@@ -40,3 +42,19 @@ via 32 tools over the Model Context Protocol.
 ## Transport
 
 stdio — Claude Desktop spawns `jarvis-mcp/server.py` as a subprocess.
+
+## ⚠️ Security Warning
+
+This server gives Claude **unrestricted control** over your machine, including:
+
+- Running arbitrary shell/PowerShell commands (`win_run_command`, `win_run_script`)
+- Permanently deleting files and directories, including recursively (`win_delete_file`)
+- Shutting down, restarting, or locking your PC
+
+There is no sandboxing or confirmation layer — anything Claude decides to run, executes
+immediately. Only run this on a machine you trust Claude with, and review
+`command_history.log` periodically. Use at your own risk.
+
+## License
+
+[MIT](LICENSE)
