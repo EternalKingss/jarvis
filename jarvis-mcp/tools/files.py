@@ -11,10 +11,12 @@ win_delete_file     : Delete a file or folder
 win_get_file_info   : Metadata for a file/folder
 """
 
+import asyncio
 import fnmatch
 import logging
 import os
 import shutil
+import stat as stat_module
 from datetime import datetime
 from typing import Optional
 
@@ -37,6 +39,17 @@ def _size_str(b: int) -> str:
 def _ts(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
+def _is_hidden(entry: os.DirEntry) -> bool:
+    """Windows hides files via the hidden attribute, not a leading dot."""
+    if entry.name.startswith("."):
+        return True
+    try:
+        attrs = entry.stat(follow_symlinks=False).st_file_attributes
+        return bool(attrs & stat_module.FILE_ATTRIBUTE_HIDDEN)
+    except (AttributeError, OSError):
+        # st_file_attributes is Windows-only
+        return False
+
 
 @mcp.tool(
     name="win_list_directory",
@@ -48,40 +61,43 @@ async def win_list_directory(
     limit: int = Field(default=100, description="Max entries to return (default 100)", ge=1, le=1000),
 ) -> str:
     """List the contents of a directory with sizes and modification dates."""
-    path = _expand(path)
-    if not os.path.exists(path):
-        return f"Path does not exist: {path}"
-    if not os.path.isdir(path):
-        return f"Not a directory: {path}"
+    def _impl() -> str:
+        p = _expand(path)
+        if not os.path.exists(p):
+            return f"Path does not exist: {p}"
+        if not os.path.isdir(p):
+            return f"Not a directory: {p}"
 
-    try:
-        items = []
-        for entry in os.scandir(path):
-            if not show_hidden and entry.name.startswith("."):
-                continue
-            try:
-                stat = entry.stat()
-                items.append({"name": entry.name, "is_dir": entry.is_dir(), "size": stat.st_size, "modified": stat.st_mtime})
-            except (PermissionError, OSError):
-                items.append({"name": entry.name, "is_dir": entry.is_dir(), "size": 0, "modified": 0})
+        try:
+            items = []
+            for entry in os.scandir(p):
+                if not show_hidden and _is_hidden(entry):
+                    continue
+                try:
+                    stat = entry.stat()
+                    items.append({"name": entry.name, "is_dir": entry.is_dir(), "size": stat.st_size, "modified": stat.st_mtime})
+                except (PermissionError, OSError):
+                    items.append({"name": entry.name, "is_dir": entry.is_dir(), "size": 0, "modified": 0})
 
-        items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
-        total = len(items)
-        items = items[:limit]
+            items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+            total = len(items)
+            shown = items[:limit]
 
-        lines = [f"Directory: {path}  ({total} items)\n"]
-        lines.append(f"{'Type':<6}  {'Size':>10}  {'Modified':<20}  Name")
-        lines.append("─" * 65)
-        for item in items:
-            kind = "DIR" if item["is_dir"] else "FILE"
-            size = "—" if item["is_dir"] else _size_str(item["size"])
-            mod = _ts(item["modified"]) if item["modified"] else "—"
-            lines.append(f"{kind:<6}  {size:>10}  {mod:<20}  {item['name']}")
-        if total > limit:
-            lines.append(f"\n... and {total - limit} more items.")
-        return "\n".join(lines)
-    except PermissionError:
-        return f"Permission denied: {path}"
+            lines = [f"Directory: {p}  ({total} items)\n"]
+            lines.append(f"{'Type':<6}  {'Size':>10}  {'Modified':<20}  Name")
+            lines.append("─" * 65)
+            for item in shown:
+                kind = "DIR" if item["is_dir"] else "FILE"
+                size = "—" if item["is_dir"] else _size_str(item["size"])
+                mod = _ts(item["modified"]) if item["modified"] else "—"
+                lines.append(f"{kind:<6}  {size:>10}  {mod:<20}  {item['name']}")
+            if total > limit:
+                lines.append(f"\n... and {total - limit} more items.")
+            return "\n".join(lines)
+        except PermissionError:
+            return f"Permission denied: {p}"
+
+    return await asyncio.to_thread(_impl)
 
 
 @mcp.tool(
@@ -94,25 +110,30 @@ async def win_read_file(
     encoding: str = Field(default="utf-8", description="File encoding, usually 'utf-8' or 'cp1252'"),
 ) -> str:
     """Read and return the text content of a file."""
-    path = _expand(path)
-    if not os.path.exists(path):
-        return f"File not found: {path}"
-    if os.path.isdir(path):
-        return "That's a directory. Use win_list_directory instead."
+    def _impl() -> str:
+        p = _expand(path)
+        if not os.path.exists(p):
+            return f"File not found: {p}"
+        if os.path.isdir(p):
+            return "That's a directory. Use win_list_directory instead."
 
-    size = os.path.getsize(path)
-    try:
-        with open(path, "r", encoding=encoding, errors="replace") as f:
-            content = f.read(max_chars)
-        header = f"File: {path}  ({_size_str(size)})\n{'─' * 50}\n"
-        footer = f"\n{'─' * 50}\n[Truncated at {max_chars} chars. Full size: {_size_str(size)}]" if size > max_chars else ""
-        return header + content + footer
-    except UnicodeDecodeError:
-        return f"Cannot read '{path}' as text — it appears to be a binary file."
-    except PermissionError:
-        return f"Permission denied: {path}"
-    except Exception as e:
-        return f"Error reading file: {e}"
+        size = os.path.getsize(p)
+        try:
+            with open(p, "r", encoding=encoding, errors="replace") as f:
+                content = f.read(max_chars + 1)
+            if "\x00" in content:
+                return f"Cannot read '{p}' as text — it appears to be a binary file."
+            truncated = len(content) > max_chars
+            content = content[:max_chars]
+            header = f"File: {p}  ({_size_str(size)})\n{'─' * 50}\n"
+            footer = f"\n{'─' * 50}\n[Truncated at {max_chars} chars. Full size: {_size_str(size)}]" if truncated else ""
+            return header + content + footer
+        except PermissionError:
+            return f"Permission denied: {p}"
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+    return await asyncio.to_thread(_impl)
 
 
 @mcp.tool(
@@ -126,38 +147,49 @@ async def win_search_files(
     file_type: Optional[str] = Field(default=None, description="Extension filter like '.py', '.txt', '.docx'"),
 ) -> str:
     """Search for files by name or wildcard pattern across a directory tree."""
-    search_path = _expand(search_path)
-    if not os.path.isdir(search_path):
-        return f"Search path does not exist: {search_path}"
+    def _impl() -> str:
+        root_path = _expand(search_path)
+        if not os.path.isdir(root_path):
+            return f"Search path does not exist: {root_path}"
 
-    SKIP_DIRS = {"$Recycle.Bin", "Windows", "System Volume Information", "Recovery",
-                 ".git", "node_modules", "__pycache__", ".cache"}
-    query_lower = query.lower()
-    results = []
+        SKIP_DIRS = {"$Recycle.Bin", "Windows", "System Volume Information", "Recovery",
+                     ".git", "node_modules", "__pycache__", ".cache"}
+        query_lower = query.lower()
+        # Wildcard queries must match exactly — a substring fallback made
+        # '*.py' also match every '.pyc' file.
+        has_wildcard = any(c in query_lower for c in "*?[")
+        results = []
 
-    for root, dirs, files in os.walk(search_path):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for fname in files:
-            if fnmatch.fnmatch(fname.lower(), query_lower) or query_lower.replace("*", "") in fname.lower():
-                if file_type and not fname.lower().endswith(file_type.lower()):
-                    continue
-                full_path = os.path.join(root, fname)
-                try:
-                    stat = os.stat(full_path)
-                    results.append({"path": full_path, "size": stat.st_size, "modified": stat.st_mtime})
-                except (PermissionError, OSError):
-                    results.append({"path": full_path, "size": 0, "modified": 0})
+        for root, dirs, files in os.walk(root_path):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for fname in files:
+                fname_lower = fname.lower()
+                if has_wildcard:
+                    matched = fnmatch.fnmatch(fname_lower, query_lower)
+                else:
+                    matched = query_lower in fname_lower
+                if matched:
+                    if file_type and not fname_lower.endswith(file_type.lower()):
+                        continue
+                    full_path = os.path.join(root, fname)
+                    try:
+                        stat = os.stat(full_path)
+                        results.append({"path": full_path, "size": stat.st_size, "modified": stat.st_mtime})
+                    except (PermissionError, OSError):
+                        results.append({"path": full_path, "size": 0, "modified": 0})
+                if len(results) >= limit:
+                    break
             if len(results) >= limit:
                 break
-        if len(results) >= limit:
-            break
 
-    if not results:
-        return f"No files found matching '{query}' in {search_path}"
-    lines = [f"Found {len(results)} file(s) matching '{query}':\n"]
-    for r in results:
-        lines.append(f"  {_size_str(r['size']):>10}  {_ts(r['modified']) if r['modified'] else '—'}  {r['path']}")
-    return "\n".join(lines)
+        if not results:
+            return f"No files found matching '{query}' in {root_path}"
+        lines = [f"Found {len(results)} file(s) matching '{query}':\n"]
+        for r in results:
+            lines.append(f"  {_size_str(r['size']):>10}  {_ts(r['modified']) if r['modified'] else '—'}  {r['path']}")
+        return "\n".join(lines)
+
+    return await asyncio.to_thread(_impl)
 
 
 @mcp.tool(
@@ -168,12 +200,12 @@ async def win_create_folder(
     path: str = Field(..., description="Full path of the folder to create (including parent dirs if needed)."),
 ) -> str:
     """Create a new directory (and any missing parent directories)."""
-    path = _expand(path)
+    p = _expand(path)
     try:
-        os.makedirs(path, exist_ok=True)
-        return f"Created folder: {path}"
+        await asyncio.to_thread(os.makedirs, p, exist_ok=True)
+        return f"Created folder: {p}"
     except PermissionError:
-        return f"Permission denied: {path}"
+        return f"Permission denied: {p}"
     except Exception as e:
         return f"Failed to create folder: {e}"
 
@@ -191,7 +223,7 @@ async def win_move_file(
     if not os.path.exists(src):
         return f"Source not found: {src}"
     try:
-        shutil.move(src, dst)
+        await asyncio.to_thread(shutil.move, src, dst)
         return f"Moved: {src}  →  {dst}"
     except Exception as e:
         return f"Move failed: {e}"
@@ -212,7 +244,7 @@ async def win_copy_file(
     if os.path.isdir(src):
         return "Use win_run_command with 'robocopy' to copy whole directories."
     try:
-        result = shutil.copy2(src, dst)
+        result = await asyncio.to_thread(shutil.copy2, src, dst)
         return f"Copied: {src}  →  {result}"
     except Exception as e:
         return f"Copy failed: {e}"
@@ -227,20 +259,20 @@ async def win_delete_file(
     recursive: bool = Field(default=False, description="Delete non-empty directories and all contents (default False)."),
 ) -> str:
     """Delete a file or folder permanently. Always confirm with the user first."""
-    path = _expand(path)
-    if not os.path.exists(path):
-        return f"Path not found: {path}"
+    p = _expand(path)
+    if not os.path.exists(p):
+        return f"Path not found: {p}"
     try:
-        if os.path.isfile(path):
-            os.remove(path)
-            return f"Deleted file: {path}"
-        elif os.path.isdir(path):
+        if os.path.isfile(p):
+            await asyncio.to_thread(os.remove, p)
+            return f"Deleted file: {p}"
+        elif os.path.isdir(p):
             if recursive:
-                shutil.rmtree(path)
-                return f"Deleted directory and all contents: {path}"
+                await asyncio.to_thread(shutil.rmtree, p)
+                return f"Deleted directory and all contents: {p}"
             else:
-                os.rmdir(path)
-                return f"Deleted empty directory: {path}"
+                await asyncio.to_thread(os.rmdir, p)
+                return f"Deleted empty directory: {p}"
     except OSError as e:
         if "not empty" in str(e).lower():
             return "Directory is not empty. Set recursive=True to delete it and all contents."
@@ -257,24 +289,27 @@ async def win_get_file_info(
     path: str = Field(..., description="File or folder path to inspect."),
 ) -> str:
     """Get metadata for a file or directory: size, created/modified dates, type."""
-    path = _expand(path)
-    if not os.path.exists(path):
-        return f"Path not found: {path}"
-    try:
-        stat = os.stat(path)
-        kind = "Directory" if os.path.isdir(path) else "File"
-        lines = [
-            f"Path     : {path}", f"Type     : {kind}",
-            f"Size     : {_size_str(stat.st_size)} ({stat.st_size:,} bytes)",
-            f"Created  : {_ts(stat.st_ctime)}", f"Modified : {_ts(stat.st_mtime)}",
-            f"Accessed : {_ts(stat.st_atime)}",
-        ]
-        if kind == "Directory":
-            try:
-                count = sum(len(files) for _, _, files in os.walk(path))
-                lines.append(f"Files    : {count} (recursive)")
-            except Exception:
-                pass
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Error: {e}"
+    def _impl() -> str:
+        p = _expand(path)
+        if not os.path.exists(p):
+            return f"Path not found: {p}"
+        try:
+            stat = os.stat(p)
+            kind = "Directory" if os.path.isdir(p) else "File"
+            lines = [
+                f"Path     : {p}", f"Type     : {kind}",
+                f"Size     : {_size_str(stat.st_size)} ({stat.st_size:,} bytes)",
+                f"Created  : {_ts(stat.st_ctime)}", f"Modified : {_ts(stat.st_mtime)}",
+                f"Accessed : {_ts(stat.st_atime)}",
+            ]
+            if kind == "Directory":
+                try:
+                    count = sum(len(files) for _, _, files in os.walk(p))
+                    lines.append(f"Files    : {count} (recursive)")
+                except Exception:
+                    pass
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error: {e}"
+
+    return await asyncio.to_thread(_impl)

@@ -23,16 +23,16 @@ from mcp_instance import mcp  # noqa: F401
 
 # ── Register all tools by importing each module ─────────────────────────────
 # Imports trigger the @mcp.tool() decorators in each file.
-import tools.terminal   # win_run_command, win_run_script
-import tools.apps       # win_open_app, win_close_app, win_list_running_apps, win_switch_to_app, win_list_installed
-import tools.system     # win_get_system_info, win_list_processes, win_kill_process, win_adjust_volume,
-                        # win_take_screenshot, win_get_network_info, win_shutdown, win_restart, win_lock, win_cancel_shutdown
-import tools.files      # win_list_directory, win_read_file, win_search_files, win_create_folder,
-                        # win_move_file, win_copy_file, win_delete_file, win_get_file_info
-import tools.browser    # win_open_url, win_search_web
-import tools.media      # win_media_control
-import tools.clipboard  # win_get_clipboard, win_set_clipboard
-import tools.screen     # win_read_screen_text, win_get_active_window
+import tools.terminal   # noqa: F401  win_run_command, win_run_script
+import tools.apps       # noqa: F401  win_open_app, win_close_app, win_list_running_apps, win_switch_to_app, win_list_installed
+import tools.system     # noqa: F401  win_get_system_info, win_list_processes, win_kill_process, win_adjust_volume,
+                        #             win_take_screenshot, win_get_network_info, win_shutdown, win_restart, win_lock, win_cancel_shutdown
+import tools.files      # noqa: F401  win_list_directory, win_read_file, win_search_files, win_create_folder,
+                        #             win_move_file, win_copy_file, win_delete_file, win_get_file_info
+import tools.browser    # noqa: F401  win_open_url, win_search_web
+import tools.media      # noqa: F401  win_media_control
+import tools.clipboard  # noqa: F401  win_get_clipboard, win_set_clipboard
+import tools.screen     # noqa: F401  win_read_screen_text, win_get_active_window
 
 
 if __name__ == "__main__":
