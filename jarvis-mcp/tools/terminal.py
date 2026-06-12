@@ -10,7 +10,7 @@ from typing import Literal, Optional
 
 from pydantic import Field
 from mcp_instance import mcp
-from utils.shell import run_command, format_result
+from utils.shell import run_command_async, format_result
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ async def win_run_command(
     PowerShell cmdlets, file operations — anything you'd type in a terminal.
     Returns full stdout, stderr, exit code, and timing.
     """
-    result = run_command(command=command, shell=shell, working_dir=working_dir, timeout=timeout)
+    result = await run_command_async(command=command, shell=shell, working_dir=working_dir, timeout=timeout)
     return format_result(result)
 
 
@@ -52,5 +52,5 @@ async def win_run_script(
     The entire script runs as a single unit.
     """
     wrapped = f"& {{\n{script}\n}}"
-    result = run_command(command=wrapped, shell="powershell", working_dir=working_dir, timeout=timeout)
+    result = await run_command_async(command=wrapped, shell="powershell", working_dir=working_dir, timeout=timeout)
     return format_result(result)

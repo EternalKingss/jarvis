@@ -6,12 +6,13 @@ Everything is logged.
 """
 
 import asyncio
-import json
 import logging
 import os
 import subprocess
 import time
 from typing import Literal, Optional
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,13 @@ LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "command_history.log")
 
 
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+# Windows PowerShell 5.1 writes the OEM codepage to pipes by default, which
+# mangles non-ASCII output when we decode it as UTF-8 below. The try/catch
+# guards hosts without an attached console, where setting it throws.
+_PS_UTF8_PREFIX = (
+    "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}; "
+)
 
 
 def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> None:
@@ -45,6 +53,25 @@ def _resolve_working_dir(working_dir: Optional[str]) -> str:
             return expanded
         logger.warning(f"Working dir '{working_dir}' not found, using home dir")
     return os.path.expanduser("~")
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all of its descendants.
+
+    Killing only the shell on timeout leaves grandchildren (the actual
+    command) running orphaned on Windows.
+    """
+    try:
+        parent = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return
+    procs = parent.children(recursive=True) + [parent]
+    for p in procs:
+        try:
+            p.kill()
+        except psutil.Error:
+            pass
+    psutil.wait_procs(procs, timeout=3)
 
 
 def run_command(
@@ -77,58 +104,61 @@ def run_command(
                 "-NoProfile",
                 "-NonInteractive",
                 "-OutputFormat", "Text",
-                "-Command", command,
+                "-Command", _PS_UTF8_PREFIX + command,
             ]
         else:
             # cmd.exe with unicode codepage
             cmd_args = ["cmd.exe", "/c", "chcp 65001 >nul 2>&1 & " + command]
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd_args,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=timeout,
             cwd=cwd,
         )
+        try:
+            raw_stdout, raw_stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(proc.pid)
+            raw_stdout, raw_stderr = proc.communicate()
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            _log_command(command, shell, cwd, -1)
+            return {
+                "command": command,
+                "shell": shell,
+                "working_dir": cwd,
+                "exit_code": -1,
+                "stdout": (raw_stdout or "").strip()[:4000],
+                "stderr": f"Command timed out after {timeout} seconds. Process tree killed.",
+                "execution_ms": elapsed_ms,
+                "success": False,
+            }
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        stdout = result.stdout.strip()
-        stderr = result.stderr.strip()
+        stdout = raw_stdout.strip()
+        stderr = raw_stderr.strip()
 
         # Truncate large outputs — return the most useful parts
         if len(stdout) > 8000:
             half = 3500
             stdout = stdout[:half] + f"\n\n... [truncated {len(stdout) - half*2} chars] ...\n\n" + stdout[-half:]
         if len(stderr) > 2000:
-            stderr = stderr[:2000] + f"\n... [truncated]"
+            stderr = stderr[:2000] + "\n... [truncated]"
 
-        _log_command(command, shell, cwd, result.returncode)
+        _log_command(command, shell, cwd, proc.returncode)
 
         return {
             "command": command,
             "shell": shell,
             "working_dir": cwd,
-            "exit_code": result.returncode,
+            "exit_code": proc.returncode,
             "stdout": stdout,
             "stderr": stderr,
             "execution_ms": elapsed_ms,
-            "success": result.returncode == 0,
-        }
-
-    except subprocess.TimeoutExpired:
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        _log_command(command, shell, cwd, -1)
-        return {
-            "command": command,
-            "shell": shell,
-            "working_dir": cwd,
-            "exit_code": -1,
-            "stdout": "",
-            "stderr": f"Command timed out after {timeout} seconds.",
-            "execution_ms": elapsed_ms,
-            "success": False,
+            "success": proc.returncode == 0,
         }
 
     except FileNotFoundError as e:
@@ -155,6 +185,23 @@ def run_command(
             "execution_ms": 0,
             "success": False,
         }
+
+
+async def run_command_async(
+    command: str,
+    shell: Literal["powershell", "cmd"] = "powershell",
+    working_dir: Optional[str] = None,
+    timeout: int = 30,
+) -> dict:
+    """run_command off the event loop.
+
+    Tool handlers run on the server's event loop; a blocking subprocess call
+    there stalls the whole MCP connection (heartbeats included) for the
+    duration of the command.
+    """
+    return await asyncio.to_thread(
+        run_command, command=command, shell=shell, working_dir=working_dir, timeout=timeout
+    )
 
 
 def format_result(result: dict) -> str:

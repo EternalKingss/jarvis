@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import Field
 from mcp_instance import mcp
-from utils.shell import run_command
+from utils.shell import run_command_async
 
 logger = logging.getLogger(__name__)
 
@@ -36,5 +36,5 @@ public class MediaKey {{
 [MediaKey]::Send({vk})
 Write-Output "Media: {action}"
 """
-    result = run_command(ps_script, shell="powershell", timeout=10)
+    result = await run_command_async(ps_script, shell="powershell", timeout=10)
     return result["stdout"] or f"Media key sent: {action}"

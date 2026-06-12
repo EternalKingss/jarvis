@@ -4,7 +4,6 @@ Searches Start Menu, Program Files, AppData, registry, and PATH
 to locate installed applications by fuzzy name matching.
 """
 
-import fnmatch
 import glob
 import logging
 import os
@@ -119,16 +118,24 @@ def find_application(app_request: str) -> Optional[str]:
     """
     query = _normalize(app_request)
 
-    # 1. Check aliases first — fastest path
-    for alias, exe_names in ALIASES.items():
-        if query == alias or query in alias or alias in query:
-            for exe in exe_names:
-                path = _find_in_path(exe)
-                if path:
-                    logger.info(f"Found '{app_request}' via alias → {path}")
-                    return path
-            # If not in PATH, return the bare exe name anyway (Windows will search)
-            return exe_names[0]
+    # 1. Check aliases first — fastest path. Exact match, or every word of
+    # the alias appearing in the query ("google chrome" → "chrome"). Plain
+    # substring matching here sent "wordpad" to Word and "note" to Notepad.
+    query_words = set(query.split())
+    exe_names = ALIASES.get(query)
+    if exe_names is None:
+        for alias, exes in ALIASES.items():
+            if set(alias.split()) <= query_words:
+                exe_names = exes
+                break
+    if exe_names is not None:
+        for exe in exe_names:
+            path = _find_in_path(exe)
+            if path:
+                logger.info(f"Found '{app_request}' via alias → {path}")
+                return path
+        # If not in PATH, return the bare exe name anyway (Windows will search)
+        return exe_names[0]
 
     # 2. Try exact exe name in PATH
     path = _find_in_path(query)
