@@ -6,6 +6,7 @@ Everything is logged.
 """
 
 import asyncio
+import base64
 import logging
 import os
 import subprocess
@@ -21,12 +22,49 @@ LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "command_history.log")
 
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
-# Windows PowerShell 5.1 writes the OEM codepage to pipes by default, which
-# mangles non-ASCII output when we decode it as UTF-8 below. The try/catch
-# guards hosts without an attached console, where setting it throws.
-_PS_UTF8_PREFIX = (
-    "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}; "
-)
+# CREATE_NO_WINDOW keeps a console from flashing on every shell-out under GUI
+# hosts (Claude Desktop). It only exists on Windows; getattr keeps the module
+# importable on other platforms (CI, dev), where the flag is a harmless 0.
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _build_ps_script(command: str) -> str:
+    """Wrap a user command into a self-contained PowerShell script.
+
+    Two problems this solves:
+
+    * UTF-8 output — Windows PowerShell 5.1 writes the OEM codepage to pipes by
+      default, mangling non-ASCII output when we decode it as UTF-8. The
+      try/catch guards hosts without an attached console, where setting it
+      throws.
+    * Exit-code propagation — with ``-Command`` the host exits 0 even when a
+      native command inside returned nonzero or a cmdlet threw, so failures were
+      reported as ``success: True``. We reset ``$LASTEXITCODE``, run the command
+      in a try/catch (terminating errors -> exit 1), then exit with the last
+      native exit code.
+
+    The result is handed to PowerShell via ``-EncodedCommand`` (base64 of the
+    UTF-16LE bytes), which sidesteps the nested-quoting breakage that
+    ``-Command`` suffers with quotes, ``$`` and backticks.
+    """
+    return (
+        "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n"
+        "$global:LASTEXITCODE = 0\n"
+        "try {\n"
+        f"{command}\n"
+        "}\n"
+        "catch {\n"
+        "  Write-Error $_\n"
+        "  exit 1\n"
+        "}\n"
+        "if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }\n"
+        "exit 0\n"
+    )
+
+
+def _encode_ps(script: str) -> str:
+    """Encode a PowerShell script for -EncodedCommand (base64 UTF-16LE)."""
+    return base64.b64encode(script.encode("utf-16-le")).decode("ascii")
 
 
 def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> None:
@@ -46,12 +84,19 @@ def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> 
 
 
 def _resolve_working_dir(working_dir: Optional[str]) -> str:
-    """Resolve working directory, defaulting to user home."""
+    """Resolve working directory, defaulting to user home.
+
+    Raises NotADirectoryError when an explicit working_dir was given but does
+    not exist. Silently falling back to the home dir here made scripts run in
+    the wrong place, and the resulting errors looked like the script's fault.
+    """
     if working_dir:
         expanded = os.path.expandvars(os.path.expanduser(working_dir))
         if os.path.isdir(expanded):
             return expanded
-        logger.warning(f"Working dir '{working_dir}' not found, using home dir")
+        raise NotADirectoryError(
+            f"working_dir does not exist: '{working_dir}' (resolved to '{expanded}')"
+        )
     return os.path.expanduser("~")
 
 
@@ -93,18 +138,32 @@ def run_command(
         execution_ms  — wall-clock time in milliseconds
         success       — True if exit_code == 0
     """
-    cwd = _resolve_working_dir(working_dir)
+    try:
+        cwd = _resolve_working_dir(working_dir)
+    except NotADirectoryError as e:
+        return {
+            "command": command,
+            "shell": shell,
+            "working_dir": working_dir,
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": str(e),
+            "execution_ms": 0,
+            "success": False,
+        }
+
     start = time.monotonic()
 
     try:
         if shell == "powershell":
-            # Run PowerShell with UTF-8 output, bypass execution policy for scripts
+            # Run PowerShell with UTF-8 output and correct exit-code propagation.
+            # -EncodedCommand (base64 UTF-16LE) avoids nested-quoting breakage.
             cmd_args = [
                 "powershell.exe",
                 "-NoProfile",
                 "-NonInteractive",
                 "-OutputFormat", "Text",
-                "-Command", _PS_UTF8_PREFIX + command,
+                "-EncodedCommand", _encode_ps(_build_ps_script(command)),
             ]
         else:
             # cmd.exe with unicode codepage
@@ -112,12 +171,14 @@ def run_command(
 
         proc = subprocess.Popen(
             cmd_args,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
             cwd=cwd,
+            creationflags=_CREATE_NO_WINDOW,
         )
         try:
             raw_stdout, raw_stderr = proc.communicate(timeout=timeout)
