@@ -9,9 +9,11 @@ import asyncio
 import base64
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Literal, Optional
+from xml.etree import ElementTree as ET
 
 import psutil
 
@@ -65,6 +67,66 @@ def _build_ps_script(command: str) -> str:
 def _encode_ps(script: str) -> str:
     """Encode a PowerShell script for -EncodedCommand (base64 UTF-16LE)."""
     return base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+
+
+_CLIXML_MARKER = "#< CLIXML"
+_XML_ESCAPE_RE = re.compile(r"_x([0-9A-Fa-f]{4})_")
+
+
+def _decode_ps_escapes(text: str) -> str:
+    """Decode CLIXML _xHHHH_ character escapes (e.g. _x000D_ -> CR)."""
+    return _XML_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), text)
+
+
+def clean_clixml(text: str) -> str:
+    """Turn PowerShell's CLIXML-serialized error stream back into plain text.
+
+    When powershell.exe's stderr is redirected, it serializes error records as
+    CLIXML (``#< CLIXML`` followed by an ``<Objs>`` document) instead of plain
+    text, so callers see markup garbage instead of the message. We extract the
+    text of the top-level ``<S>`` string records (which hold the error text) and
+    decode the ``_xHHHH_`` escapes. Anything printed before the marker is kept
+    as-is. If parsing fails, the original text is returned rather than dropped.
+    """
+    if not text or _CLIXML_MARKER not in text:
+        return text
+
+    prefix, _, blob = text.partition(_CLIXML_MARKER)
+    blob = blob.lstrip("\r\n ")
+    try:
+        root = ET.fromstring(blob)
+    except ET.ParseError:
+        return text
+
+    parts = []
+    for el in list(root):
+        # Namespaced tags arrive as '{...}S'; compare on the local name.
+        if el.tag.split("}")[-1] == "S" and el.text:
+            parts.append(_decode_ps_escapes(el.text))
+
+    cleaned = (prefix + "".join(parts)).strip()
+    return cleaned or text
+
+
+def build_shell_args(command: str, shell: str) -> list[str]:
+    """Build the argv for launching a command in the chosen shell.
+
+    Shared by the foreground executor and the background-job runner so both
+    inherit the same UTF-8 handling, exit-code propagation, and encoded-command
+    quoting.
+    """
+    if shell == "powershell":
+        # -EncodedCommand (base64 UTF-16LE) avoids nested-quoting breakage and
+        # carries the exit-code propagation wrapper from _build_ps_script.
+        return [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-OutputFormat", "Text",
+            "-EncodedCommand", _encode_ps(_build_ps_script(command)),
+        ]
+    # cmd.exe with unicode codepage
+    return ["cmd.exe", "/c", "chcp 65001 >nul 2>&1 & " + command]
 
 
 def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> None:
@@ -155,19 +217,7 @@ def run_command(
     start = time.monotonic()
 
     try:
-        if shell == "powershell":
-            # Run PowerShell with UTF-8 output and correct exit-code propagation.
-            # -EncodedCommand (base64 UTF-16LE) avoids nested-quoting breakage.
-            cmd_args = [
-                "powershell.exe",
-                "-NoProfile",
-                "-NonInteractive",
-                "-OutputFormat", "Text",
-                "-EncodedCommand", _encode_ps(_build_ps_script(command)),
-            ]
-        else:
-            # cmd.exe with unicode codepage
-            cmd_args = ["cmd.exe", "/c", "chcp 65001 >nul 2>&1 & " + command]
+        cmd_args = build_shell_args(command, shell)
 
         proc = subprocess.Popen(
             cmd_args,
@@ -200,7 +250,7 @@ def run_command(
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         stdout = raw_stdout.strip()
-        stderr = raw_stderr.strip()
+        stderr = clean_clixml(raw_stderr).strip()
 
         # Truncate large outputs — return the most useful parts
         if len(stdout) > 8000:
