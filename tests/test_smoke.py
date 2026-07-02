@@ -13,6 +13,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "jarvis-mcp
 EXPECTED_TOOLS = {
     # terminal
     "win_run_command", "win_run_script",
+    # jobs
+    "win_start_job", "win_job_output", "win_stop_job", "win_list_jobs",
     # apps
     "win_open_app", "win_close_app", "win_list_running_apps",
     "win_switch_to_app", "win_list_installed",
@@ -41,4 +43,4 @@ def test_all_tools_registered():
     tools = asyncio.run(server.mcp.list_tools())
     names = {t.name for t in tools}
     assert names == EXPECTED_TOOLS
-    assert len(tools) == 32
+    assert len(tools) == 36
