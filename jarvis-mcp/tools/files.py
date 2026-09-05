@@ -3,6 +3,7 @@ File system tools.
 
 win_list_directory  : List contents of a folder
 win_read_file       : Read a file's text content
+win_write_file      : Write (or append) text to a file, atomic + verified
 win_search_files    : Search for files by name or extension
 win_create_folder   : Create a new directory
 win_move_file       : Move or rename a file/folder
@@ -132,6 +133,65 @@ async def win_read_file(
             return f"Permission denied: {p}"
         except Exception as e:
             return f"Error reading file: {e}"
+
+    return await asyncio.to_thread(_impl)
+
+
+@mcp.tool(
+    name="win_write_file",
+    annotations={"title": "Write File Contents", "readOnlyHint": False, "destructiveHint": True},
+)
+async def win_write_file(
+    path: str = Field(..., description="Path of the file to write. Parent dirs created automatically."),
+    content: str = Field(..., description="Text content to write."),
+    encoding: str = Field(default="utf-8", description="Encoding: 'utf-8' (default), 'utf-8-sig' for BOM, 'cp1252'"),
+    append: bool = Field(default=False, description="Append instead of overwrite (default False)."),
+    verify: bool = Field(default=True, description="Read the file back after writing and confirm it matches (default True)."),
+) -> str:
+    """Write text to a file. Overwrites by default; atomic write + read-back
+    verification protects against OneDrive sync clobbering the write."""
+    def _impl() -> str:
+        p = _expand(path)
+        parent = os.path.dirname(p)
+        try:
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+
+            if append:
+                with open(p, "a", encoding=encoding, newline="") as f:
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+            else:
+                # Atomic: write to temp file in same dir, fsync, then os.replace().
+                # Presents as one instantaneous filesystem event — OneDrive conflict
+                # resolver can't snapshot a half-written file.
+                tmp = f"{p}.__jarvis_tmp_{os.getpid()}"
+                with open(tmp, "w", encoding=encoding, newline="") as f:
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, p)  # atomic on same volume, incl. NTFS
+
+            size = os.path.getsize(p)
+
+            if verify and not append:
+                with open(p, "r", encoding=encoding, newline="") as f:
+                    readback = f.read()
+                if readback != content:
+                    return (
+                        f"WARNING: wrote {p} but read-back does not match "
+                        f"(wrote {len(content)} chars, read {len(readback)}). "
+                        f"Likely OneDrive sync conflict — retry or check sync status."
+                    )
+
+            action = "Appended to" if append else "Wrote"
+            return f"{action}: {p}  ({size:,} bytes{', verified' if verify and not append else ''})"
+
+        except PermissionError:
+            return f"Permission denied: {p}"
+        except Exception as e:
+            return f"Write failed: {type(e).__name__}: {e}"
 
     return await asyncio.to_thread(_impl)
 

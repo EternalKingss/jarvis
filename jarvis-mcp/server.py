@@ -2,9 +2,9 @@
 """
 windows_mcp — Jarvis Windows OS Control MCP Server
 ====================================================
-Gives Claude full control over the Windows machine via 36 tools across:
+Gives Claude full control over the Windows machine via 37 tools across:
   - Terminal   : run any cmd/PowerShell command or script
-  - Jobs       : run long commands in the background, poll output, stop them
+  - Jobs       : start/poll/stop long-running background commands
   - Apps       : open, close, list, switch applications
   - System     : info, processes, volume, screenshot, shutdown/restart/lock
   - Files      : list, read, search, create, move, copy, delete
@@ -22,10 +22,24 @@ import sys
 # ── Shared FastMCP instance must be imported first ──────────────────────────
 from mcp_instance import mcp  # noqa: F401
 
+import os
+import socket
+
+
+def _backfill_env() -> None:
+    """Claude Desktop launches MCP servers with an incomplete Windows env.
+    Repair the well-known vars so child shells behave like normal sessions."""
+    os.environ.setdefault("COMPUTERNAME", socket.gethostname().upper())
+    os.environ.setdefault("USERDOMAIN", os.environ.get("COMPUTERNAME", socket.gethostname().upper()))
+    os.environ.setdefault("LOGONSERVER", "\\\\" + os.environ["COMPUTERNAME"])
+
+
+_backfill_env()
+
+
 # ── Register all tools by importing each module ─────────────────────────────
 # Imports trigger the @mcp.tool() decorators in each file.
 import tools.terminal   # noqa: F401  win_run_command, win_run_script
-import tools.jobs       # noqa: F401  win_start_job, win_job_output, win_stop_job, win_list_jobs
 import tools.apps       # noqa: F401  win_open_app, win_close_app, win_list_running_apps, win_switch_to_app, win_list_installed
 import tools.system     # noqa: F401  win_get_system_info, win_list_processes, win_kill_process, win_adjust_volume,
                         #             win_take_screenshot, win_get_network_info, win_shutdown, win_restart, win_lock, win_cancel_shutdown
@@ -35,6 +49,7 @@ import tools.browser    # noqa: F401  win_open_url, win_search_web
 import tools.media      # noqa: F401  win_media_control
 import tools.clipboard  # noqa: F401  win_get_clipboard, win_set_clipboard
 import tools.screen     # noqa: F401  win_read_screen_text, win_get_active_window
+import tools.jobs       # noqa: F401  win_start_job, win_job_output, win_stop_job, win_list_jobs
 
 
 if __name__ == "__main__":

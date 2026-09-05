@@ -2,12 +2,14 @@
 
 A Windows OS Control MCP Server for Claude Desktop. Gives Claude full control over your
 Windows machine — terminal, apps, files, system, browser, media, clipboard, and screen —
-via 32 tools over the Model Context Protocol.
+via 37 tools over the Model Context Protocol.
 
 ## Tools
 
 - **Terminal**: run any cmd/PowerShell command or script
   - `win_run_command`, `win_run_script`
+- **Jobs**: run long commands in the background with no timeout, poll for live output
+  - `win_start_job`, `win_job_output`, `win_stop_job`, `win_list_jobs`
 - **Apps**: open, close, list, switch applications
   - `win_open_app`, `win_close_app`, `win_list_running_apps`, `win_switch_to_app`, `win_list_installed`
 - **System**: info, processes, volume, screenshot, shutdown/restart/lock

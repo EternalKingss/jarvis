@@ -253,19 +253,38 @@ async def win_take_screenshot(
     def _impl() -> str:
         try:
             from PIL import ImageGrab
+        except ImportError:
+            return "Error: Pillow not installed. Run: pip install Pillow"
+
+        try:
+            # ── Resolve and validate output path ─────────────────────────
             if save_path:
-                out_path = os.path.expandvars(os.path.expanduser(save_path))
+                out_path = os.path.abspath(os.path.expandvars(os.path.expanduser(save_path)))
+                parent = os.path.dirname(out_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)          # fix: create parent dirs
+                root, ext = os.path.splitext(out_path)
+                if ext.lower() not in (".png", ".jpg", ".jpeg", ".bmp"):
+                    out_path = root + ".png"                     # fix: normalize extension
             else:
                 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 out_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{ts}.png")
-            img = ImageGrab.grab()
-            img.save(out_path)
-            return f"Screenshot saved: {out_path}  ({img.width}x{img.height})"
-        except ImportError:
-            return "Error: Pillow not installed. Run: pip install Pillow"
+
+            # ── Capture and save ─────────────────────────────────────────
+            img = ImageGrab.grab(all_screens=False)
+            fmt = "PNG" if out_path.lower().endswith(".png") else None
+            img.save(out_path, format=fmt)
+
+            # ── Verify the file actually landed on disk ──────────────────
+            if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+                return f"Screenshot failed: save reported success but no file at {out_path}"
+
+            return f"Screenshot saved: {out_path}  ({img.width}x{img.height}, {os.path.getsize(out_path):,} bytes)"
+
         except Exception as e:
-            return f"Screenshot failed: {e}"
+            logger.error(f"win_take_screenshot failed (save_path={save_path!r}): {e}", exc_info=True)
+            return f"Screenshot failed: {type(e).__name__}: {e}"
 
     return await asyncio.to_thread(_impl)
 

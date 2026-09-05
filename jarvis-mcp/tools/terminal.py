@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
     annotations={"title": "Run Terminal Command", "readOnlyHint": False, "destructiveHint": True},
 )
 async def win_run_command(
-    command: str = Field(..., description="Any cmd or PowerShell command. E.g. 'dir C:\\Users\\Eternal\\Desktop', 'git status', 'python script.py', 'ipconfig /all', 'Get-Process | Sort CPU -Desc | Select -First 10'"),
+    command: str = Field(..., description="Any cmd or PowerShell command. E.g. 'dir C:\\\\Users\\\\Eternal\\\\Desktop', 'git status', 'python script.py', 'ipconfig /all', 'Get-Process | Sort CPU -Desc | Select -First 10'"),
     shell: Literal["powershell", "cmd"] = Field(default="powershell", description="Shell to use: 'powershell' (default) or 'cmd'"),
-    working_dir: Optional[str] = Field(default=None, description="Directory to run in. E.g. 'C:\\\\Users\\\\Eternal\\\\Desktop\\\\project' or '~'. Defaults to user home."),
+    working_dir: Optional[str] = Field(default=None, description="Directory to run in. E.g. 'C:\\\\\\\\Users\\\\\\\\Eternal\\\\\\\\Desktop\\\\\\\\project' or '~'. Defaults to user home."),
     timeout: int = Field(default=30, description="Max seconds to wait (default 30, max 300)", ge=1, le=300),
 ) -> str:
     """
@@ -50,6 +50,14 @@ async def win_run_script(
 
     Use when you need loops, conditionals, or multi-line logic.
     The entire script runs as a single unit.
+
+    PowerShell 5.x compatibility notes:
+    - Do NOT use ``Start-Process -Environment @{...}`` — the -Environment
+      parameter was added in PowerShell 7 and throws on Windows PowerShell 5.x.
+      Instead, set env vars inline before the command: ``$env:MY_VAR = 'value'``
+      Child processes inherit env vars set on $env: this way.
+    - node, pnpm, npx are available without full paths — common install locations
+      are automatically prepended to PATH by the shell executor.
     """
     wrapped = f"& {{\n{script}\n}}"
     result = await run_command_async(command=wrapped, shell="powershell", working_dir=working_dir, timeout=timeout)
