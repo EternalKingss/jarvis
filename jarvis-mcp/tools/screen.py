@@ -5,8 +5,12 @@ import logging
 import os
 import tempfile
 import uuid
+from typing import Optional
+
+from pydantic import Field
 from mcp_instance import mcp
 from utils import winrt
+from utils.capture import CaptureError, capture
 from utils.shell import run_command, run_command_async
 
 logger = logging.getLogger(__name__)
@@ -18,17 +22,23 @@ _MAX_OCR_CHARS = 8000
     name="win_read_screen_text",
     annotations={"title": "Read Screen Text (OCR)", "readOnlyHint": True, "destructiveHint": False},
 )
-async def win_read_screen_text() -> str:
-    """Capture the current screen and extract all visible text using the built-in Windows OCR engine."""
+async def win_read_screen_text(
+    window_title: Optional[str] = Field(default=None, description="Only read this window (exact or partial title). Default: the whole primary screen."),
+) -> str:
+    """Capture the current screen, or one window, and extract all visible text using the built-in Windows OCR engine."""
     def _impl() -> str:
         try:
-            from PIL import ImageGrab
+            import PIL  # noqa: F401
         except ImportError:
             return "Pillow is missing. Reinstall the extension, or run: pip install Pillow"
 
         path = os.path.join(tempfile.gettempdir(), f"jarvis_ocr_{uuid.uuid4().hex[:8]}.png")
         try:
-            ImageGrab.grab().save(path)
+            try:
+                img, _ = capture(window_title)
+            except CaptureError as e:
+                return str(e)
+            img.save(path)
             result = run_command(winrt.ocr_script(path), shell="powershell", timeout=60)
         except Exception as e:
             return f"OCR failed: {type(e).__name__}: {e}"

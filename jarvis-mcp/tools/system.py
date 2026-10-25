@@ -28,6 +28,7 @@ from pydantic import Field
 from mcp_instance import mcp
 from utils import settings
 from utils.procs import protected_pids
+from utils.capture import CaptureError, capture
 from utils.shell import run_command, run_command_async
 
 logger = logging.getLogger(__name__)
@@ -258,11 +259,14 @@ async def win_adjust_volume(
 async def win_take_screenshot(
     save_path: Optional[str] = Field(default=None, description="Where to save the PNG. Defaults to ~/Pictures/Jarvis Screenshots/screenshot_TIMESTAMP.png"),
     include_image: bool = Field(default=True, description="Also return the screenshot so you can see it (default True). Set False to only save the file."),
+    window_title: Optional[str] = Field(default=None, description="Capture just this window (exact or partial title) instead of the whole screen."),
+    region: Optional[list[int]] = Field(default=None, description="Capture just this area: [left, top, width, height] in screen pixels.", min_length=4, max_length=4),
+    all_monitors: bool = Field(default=False, description="Capture every monitor as one image instead of only the primary screen (default False)."),
 ):
-    """Capture the current screen, save it as a PNG file, and return the image so you can see what is on screen."""
+    """Capture the screen, one window, or a region; save it as a PNG file and return the image so you can see it."""
     def _impl():
         try:
-            from PIL import ImageGrab
+            import PIL  # noqa: F401
         except ImportError:
             return "Error: Pillow not installed. Run: pip install Pillow"
 
@@ -282,7 +286,10 @@ async def win_take_screenshot(
                 out_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{ts}.png")
 
             # ── Capture and save ─────────────────────────────────────────
-            img = ImageGrab.grab(all_screens=False)
+            try:
+                img, what = capture(window_title, tuple(region) if region else None, all_monitors)
+            except CaptureError as e:
+                return str(e)
             fmt = "PNG" if out_path.lower().endswith(".png") else None
             img.save(out_path, format=fmt)
 
@@ -290,7 +297,7 @@ async def win_take_screenshot(
             if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
                 return f"Screenshot failed: save reported success but no file at {out_path}"
 
-            summary = f"Screenshot saved: {out_path}  ({img.width}x{img.height}, {os.path.getsize(out_path):,} bytes)"
+            summary = f"Screenshot of {what} saved: {out_path}  ({img.width}x{img.height}, {os.path.getsize(out_path):,} bytes)"
             if not include_image:
                 return summary
             preview = img.convert("RGB")

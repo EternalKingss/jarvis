@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "windows-jarvis",
   "display_name": "Windows Jarvis",
-  "version": "1.1.0",
-  "description": "Control your Windows PC from Claude: run commands, manage files, apps and windows, read the screen, and automate any app's UI.",
-  "long_description": "Windows Jarvis gives Claude hands-on control of a Windows 10/11 machine through 52 local tools: PowerShell/CMD commands and background jobs, apps and windows (open, close, snap, move), files and folders, system info and processes, volume and media keys, clipboard, screenshots Claude can see, built-in Windows OCR, Wi-Fi and Bluetooth, desktop notifications, and Microsoft UI Automation (click, type, read and select controls in any app).\n\nEverything runs locally on your computer. Jarvis sends nothing to any server and collects no data. Deleted files go to the Recycle Bin. Shutdown, restart, killing processes and permanent delete stay off until you enable them in the extension settings, and every tool that can change or delete things is marked destructive so Claude asks first.",
+  "version": "1.2.0",
+  "description": "Control your Windows PC from Claude: run commands, manage files, apps and windows, schedule automations, change settings, and read the screen.",
+  "long_description": "Windows Jarvis gives Claude hands-on control of a Windows 10/11 machine through 67 local tools: PowerShell/CMD commands and background jobs, apps and windows (open, close, snap, move), files and folders (including search inside files, zip/unzip and reading PDF and Word documents), system info and processes, Windows settings (brightness, light/dark mode, per-app volume, audio output, power plan), scheduled automations that run even when Claude is closed, screenshots of the screen, one window or a region, built-in Windows OCR, Wi-Fi and Bluetooth, desktop notifications, and Microsoft UI Automation.\n\nEverything runs locally on your computer. Jarvis sends nothing to any server and collects no data. Deleted files go to the Recycle Bin. Shutdown, restart, killing processes, permanent delete and scheduled automations stay off until you enable them in the extension settings, and every tool that can change or delete things is marked destructive so Claude asks first.",
   "author": {
     "name": "EternalKingss",
     "url": "https://github.com/EternalKingss"
@@ -30,7 +30,8 @@
       ],
       "env": {
         "JARVIS_ALLOW_POWER_ACTIONS": "${user_config.allow_power_actions}",
-        "JARVIS_ALLOW_PERMANENT_DELETE": "${user_config.allow_permanent_delete}"
+        "JARVIS_ALLOW_PERMANENT_DELETE": "${user_config.allow_permanent_delete}",
+        "JARVIS_ALLOW_AUTOMATIONS": "${user_config.allow_automations}"
       }
     }
   },
@@ -46,6 +47,13 @@
       "type": "boolean",
       "title": "Allow permanent delete (skip the Recycle Bin)",
       "description": "Lets Claude erase files for good when it asks to. Off by default: deleted files go to the Recycle Bin.",
+      "default": false,
+      "required": false
+    },
+    "allow_automations": {
+      "type": "boolean",
+      "title": "Allow scheduled automations",
+      "description": "Lets Claude schedule commands to run later or repeatedly on this PC (Task Scheduler, Jarvis folder only), even when Claude is closed. Off by default.",
       "default": false,
       "required": false
     }
@@ -97,7 +105,7 @@
     },
     {
       "name": "win_take_screenshot",
-      "description": "Capture the current screen, save it as a PNG file, and return the image so you can see what is on screen."
+      "description": "Capture the screen, one window, or a region; save it as a PNG file and return the image so you can see it."
     },
     {
       "name": "win_get_network_info",
@@ -177,7 +185,7 @@
     },
     {
       "name": "win_read_screen_text",
-      "description": "Capture the current screen and extract all visible text using the built-in Windows OCR engine."
+      "description": "Capture the current screen, or one window, and extract all visible text using the built-in Windows OCR engine."
     },
     {
       "name": "win_get_active_window",
@@ -258,6 +266,66 @@
     {
       "name": "win_bluetooth_power",
       "description": "Turn the Bluetooth radio on or off."
+    },
+    {
+      "name": "win_automation_create",
+      "description": "Schedule a command to run on this PC later or repeatedly, even when Claude is closed (Windows Task Scheduler)."
+    },
+    {
+      "name": "win_automation_list",
+      "description": "List every automation Jarvis has scheduled, with its exact command, schedule, next run and last result."
+    },
+    {
+      "name": "win_automation_run_now",
+      "description": "Run one of Jarvis's scheduled automations right away."
+    },
+    {
+      "name": "win_automation_history",
+      "description": "Show when an automation last ran, its result, and its most recent output."
+    },
+    {
+      "name": "win_automation_delete",
+      "description": "Remove a Jarvis automation so it never runs again, along with its saved script and output."
+    },
+    {
+      "name": "win_brightness",
+      "description": "Read or set screen brightness."
+    },
+    {
+      "name": "win_theme",
+      "description": "Read or switch Windows between light and dark mode (apps and the taskbar)."
+    },
+    {
+      "name": "win_volume_level",
+      "description": "Read or set the exact volume, or mute/unmute, for the whole PC or for one app (like the Windows volume mixer)."
+    },
+    {
+      "name": "win_audio_output",
+      "description": "List playback devices (speakers, headphones, monitors) or switch which one Windows plays sound through."
+    },
+    {
+      "name": "win_power_plan",
+      "description": "List Windows power plans or switch the active one, such as Balanced, High performance or Power saver."
+    },
+    {
+      "name": "win_search_in_files",
+      "description": "Search for text inside files in a folder and return matching lines with file paths and line numbers."
+    },
+    {
+      "name": "win_zip",
+      "description": "Compress files and folders into a new .zip file."
+    },
+    {
+      "name": "win_unzip",
+      "description": "Extract a .zip file into a folder."
+    },
+    {
+      "name": "win_open_file",
+      "description": "Open a document, image, video or folder in its default app, as if the user double-clicked it."
+    },
+    {
+      "name": "win_read_document",
+      "description": "Read the text of a PDF or Word (.docx) document."
     }
   ],
   "keywords": [
@@ -269,7 +337,8 @@
     "system",
     "desktop",
     "ocr",
-    "wifi"
+    "settings",
+    "scheduler"
   ],
   "license": "MIT",
   "privacy_policies": [

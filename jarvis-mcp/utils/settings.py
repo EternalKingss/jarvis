@@ -10,10 +10,12 @@ import os
 
 ALLOW_POWER_ACTIONS = "JARVIS_ALLOW_POWER_ACTIONS"
 ALLOW_PERMANENT_DELETE = "JARVIS_ALLOW_PERMANENT_DELETE"
+ALLOW_AUTOMATIONS = "JARVIS_ALLOW_AUTOMATIONS"
 
 _SETTING_TITLES = {
     ALLOW_POWER_ACTIONS: "Allow shutdown, restart and killing processes",
     ALLOW_PERMANENT_DELETE: "Allow permanent delete (skip the Recycle Bin)",
+    ALLOW_AUTOMATIONS: "Allow scheduled automations",
 }
 
 

@@ -14,6 +14,7 @@ from typing import Literal, Optional
 from pydantic import Field
 from mcp_instance import mcp
 from utils.shell import run_command_async
+from utils.windows import find_window, not_found_message, use_physical_pixels
 from utils.winrt import toast_script
 
 logger = logging.getLogger(__name__)
@@ -21,32 +22,6 @@ logger = logging.getLogger(__name__)
 _SW_MAXIMIZE, _SW_MINIMIZE, _SW_RESTORE = 3, 6, 9
 _SWP_NOZORDER, _SWP_NOACTIVATE = 0x0004, 0x0010
 _MONITOR_DEFAULTTONEAREST = 2
-_DPI_AWARENESS_PER_MONITOR_V2 = -4
-
-
-def _find_window(title: str) -> tuple[Optional[int], Optional[str], list[str]]:
-    """Return (hwnd, title) for the best visible top-level window match, plus all visible titles."""
-    from ctypes import wintypes
-    user32 = ctypes.windll.user32
-    found: list[tuple[int, str]] = []
-
-    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    def _collect(hwnd, _):
-        if user32.IsWindowVisible(hwnd):
-            n = user32.GetWindowTextLengthW(hwnd)
-            if n:
-                buf = ctypes.create_unicode_buffer(n + 1)
-                user32.GetWindowTextW(hwnd, buf, n + 1)
-                found.append((hwnd, buf.value))
-        return True
-
-    user32.EnumWindows(_collect, 0)
-    query = title.lower()
-    for match in (lambda t: t.lower() == query, lambda t: query in t.lower()):
-        for hwnd, t in found:
-            if match(t):
-                return hwnd, t, []
-    return None, None, [t for _, t in found]
 
 
 def _work_area(hwnd: int) -> tuple[int, int, int, int]:
@@ -85,13 +60,10 @@ async def win_arrange_window(
     def _impl() -> str:
         from ctypes import wintypes
         user32 = ctypes.windll.user32
-        # Physical pixels, so coordinates match what the user sees on high-DPI screens.
-        user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(_DPI_AWARENESS_PER_MONITOR_V2))
-
-        hwnd, title, visible = _find_window(window_title)
+        use_physical_pixels()
+        hwnd, title, visible = find_window(window_title)
         if hwnd is None:
-            sample = ", ".join(f"'{t}'" for t in visible[:15])
-            return f"No visible window title contains '{window_title}'. Open windows include: {sample}"
+            return not_found_message(window_title, visible)
 
         if action in ("minimize", "maximize", "restore"):
             user32.ShowWindow(hwnd, {"minimize": _SW_MINIMIZE, "maximize": _SW_MAXIMIZE, "restore": _SW_RESTORE}[action])

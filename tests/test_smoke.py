@@ -53,6 +53,13 @@ EXPECTED_TOOLS = {
     # wireless
     "win_wifi_networks", "win_wifi_connect", "win_wifi_disconnect",
     "win_bluetooth_devices", "win_bluetooth_power",
+    # automations
+    "win_automation_create", "win_automation_list", "win_automation_run_now",
+    "win_automation_history", "win_automation_delete",
+    # windows settings
+    "win_brightness", "win_theme", "win_volume_level", "win_audio_output", "win_power_plan",
+    # file power-ups
+    "win_search_in_files", "win_zip", "win_unzip", "win_open_file", "win_read_document",
 }
 
 on_windows = pytest.mark.skipif(sys.platform != "win32", reason="needs Windows")
@@ -73,7 +80,7 @@ def _manifest() -> dict:
 def test_all_tools_registered():
     names = {t.name for t in _tools()}
     assert names == EXPECTED_TOOLS
-    assert len(names) == 52
+    assert len(names) == 67
 
 
 def test_every_tool_is_annotated():
@@ -108,7 +115,8 @@ def test_manifest_settings_reach_the_server():
     env = m["server"]["mcp_config"]["env"]
     assert env[settings.ALLOW_POWER_ACTIONS] == "${user_config.allow_power_actions}"
     assert env[settings.ALLOW_PERMANENT_DELETE] == "${user_config.allow_permanent_delete}"
-    for key in ("allow_power_actions", "allow_permanent_delete"):
+    assert env[settings.ALLOW_AUTOMATIONS] == "${user_config.allow_automations}"
+    for key in ("allow_power_actions", "allow_permanent_delete", "allow_automations"):
         assert m["user_config"][key]["default"] is False
 
 
@@ -145,6 +153,7 @@ def settings_off(monkeypatch):
 
     monkeypatch.delenv(settings.ALLOW_POWER_ACTIONS, raising=False)
     monkeypatch.delenv(settings.ALLOW_PERMANENT_DELETE, raising=False)
+    monkeypatch.delenv(settings.ALLOW_AUTOMATIONS, raising=False)
 
 
 def test_power_actions_blocked_by_default(settings_off):
@@ -238,3 +247,123 @@ SSID 2 :
     assert [n["ssid"] for n in nets] == ["HomeNet", "(hidden)"]
     assert nets[0]["signal"] == 91 and nets[0]["auth"] == "WPA2-Personal"
     assert _saved_profiles("    All User Profile     : HomeNet\n") == ["HomeNet"]
+
+
+# ── scheduled automations ────────────────────────────────────────────────────
+
+def test_automations_blocked_by_default(settings_off):
+    from tools import automations
+
+    out = asyncio.run(automations.win_automation_create(
+        name="x", command="echo hi", schedule="daily", time_of_day="09:00", date=None,
+        days=None, every_minutes=None, shell="powershell", notify=False))
+    assert "turned off" in out
+    assert "turned off" in asyncio.run(automations.win_automation_run_now(name="x"))
+
+
+def test_automation_storage_avoids_redirected_appdata():
+    """Claude Desktop (MSIX) redirects AppData writes, which Task Scheduler can't see."""
+    from utils import automations as auto
+
+    assert "appdata" not in auto.root_dir().lower()
+    assert auto.root_dir().startswith(os.path.expanduser("~"))
+
+
+def test_automation_input_validation():
+    from utils import automations as auto
+
+    assert auto.validate_name("  Clean Downloads ") == "Clean Downloads"
+    for bad in ("", "../escape", "a" * 61, "semi;colon"):
+        with pytest.raises(auto.AutomationError):
+            auto.validate_name(bad)
+    assert auto.normalize_days(["mon", "Friday", "MON"]) == ["Monday", "Friday"]
+    with pytest.raises(auto.AutomationError):
+        auto.normalize_days(["Funday"])
+    with pytest.raises(auto.AutomationError):
+        auto.trigger_ps("daily", "9am", None, [], None)
+    with pytest.raises(auto.AutomationError):
+        auto.trigger_ps("once", "09:00", None, [], None)
+    with pytest.raises(auto.AutomationError):
+        auto.trigger_ps("every_minutes", None, None, [], 1)
+    assert "-Weekly -DaysOfWeek Monday,Friday" in auto.trigger_ps("weekly", "08:30", None, ["Monday", "Friday"], None)
+
+
+def test_automation_tasks_are_scoped_and_unelevated():
+    from utils import automations as auto
+
+    ps = auto.register_ps("Demo", "C:/x/Demo", "New-ScheduledTaskTrigger -AtLogOn", "Created by Windows Jarvis")
+    assert f"-TaskPath '{auto.TASK_PATH}'" in ps
+    assert "-RunLevel Limited" in ps and "-LogonType Interactive" in ps
+    script = auto.runner_script("Demo", "Get-Date", "powershell", False, "C:/x/Demo")
+    assert "output.log" in script and "Get-Date" in script
+
+
+# ── file power-ups ───────────────────────────────────────────────────────────
+
+def test_search_in_files_skips_binaries(tmp_path):
+    from tools import documents
+
+    (tmp_path / "a.txt").write_text("one\nfind me\n")
+    (tmp_path / "b.bin").write_bytes(b"\x00find me\x00")
+    out = asyncio.run(documents.win_search_in_files(
+        text="FIND ME", folder=str(tmp_path), file_pattern="*", regex=False, case_sensitive=False, max_results=10))
+    assert "a.txt:2: find me" in out and "b.bin" not in out
+
+
+def test_zip_and_unzip_never_overwrite(tmp_path):
+    from tools import documents
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "f.txt").write_text("data")
+    zip_path = tmp_path / "out.zip"
+    assert asyncio.run(documents.win_zip(sources=[str(tmp_path / "src")], destination=str(zip_path))).startswith("Created")
+    assert "already exists" in asyncio.run(documents.win_zip(sources=[str(tmp_path / "src")], destination=str(zip_path)))
+    dest = tmp_path / "unpacked"
+    assert asyncio.run(documents.win_unzip(zip_path=str(zip_path), destination=str(dest))).startswith("Extracted 1")
+    assert (dest / "src" / "f.txt").read_text() == "data"
+    assert asyncio.run(documents.win_unzip(zip_path=str(zip_path), destination=str(dest))).startswith("Nothing extracted")
+
+
+def test_unzip_blocks_path_traversal(tmp_path):
+    import zipfile
+
+    from tools import documents
+
+    evil = tmp_path / "evil.zip"
+    with zipfile.ZipFile(evil, "w") as z:
+        z.writestr("../escape.txt", "x")
+    out = asyncio.run(documents.win_unzip(zip_path=str(evil), destination=str(tmp_path / "out")))
+    assert out.startswith("Refusing")
+    assert not (tmp_path / "escape.txt").exists()
+
+
+def test_read_docx(tmp_path):
+    import zipfile
+
+    from tools import documents
+
+    doc = tmp_path / "d.docx"
+    with zipfile.ZipFile(doc, "w") as z:
+        z.writestr("word/document.xml",
+                   '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                   "<w:body><w:p><w:r><w:t>Hello Word</w:t></w:r></w:p></w:body></w:document>")
+    assert "Hello Word" in asyncio.run(documents.win_read_document(path=str(doc), max_chars=1000))
+
+
+def test_open_file_refuses_programs(tmp_path):
+    from tools import documents
+
+    for name in ("run.exe", "script.ps1", "go.bat", "link.lnk"):
+        f = tmp_path / name
+        f.write_text("x")
+        assert "was not opened" in asyncio.run(documents.win_open_file(path=str(f)))
+
+
+# ── screenshots ──────────────────────────────────────────────────────────────
+
+@on_windows
+def test_capture_reports_missing_window():
+    from utils.capture import CaptureError, capture
+
+    with pytest.raises(CaptureError, match="No visible window"):
+        capture(window_title="zz-no-such-window-zz")

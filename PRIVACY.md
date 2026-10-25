@@ -1,6 +1,6 @@
 # Windows Jarvis Privacy Policy
 
-Last updated: 2026-10-25
+Last updated: 2026-10-25 (v1.2)
 
 Windows Jarvis is a local MCP server. It runs on your own computer as a
 subprocess of Claude Desktop and talks to Claude only over standard input and
@@ -16,8 +16,9 @@ to the developer or to any third party.
 
 When Claude calls a tool, Jarvis reads what that tool needs from your machine,
 for example a file you asked about, the clipboard, the text on screen, a
-screenshot, the list of running processes, nearby Wi-Fi networks, paired
-Bluetooth devices, or the UI of an open window. The result is returned to
+screenshot, the text of a PDF or Word document, files matching a search, the
+list of running processes, nearby Wi-Fi networks, paired Bluetooth devices,
+audio devices, or the UI of an open window. The result is returned to
 Claude as part of your conversation. Screen text recognition (OCR) uses the
 engine built into Windows and runs entirely on your PC. How Anthropic handles conversation data is
 covered by [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy).
@@ -33,6 +34,11 @@ covered by [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy)
   are deleted as soon as the command finishes.
 - **Deleted files** go to the Windows Recycle Bin unless you have enabled
   permanent delete in the extension settings.
+- **Scheduled automations** (only if you enable them) are stored in
+  `%USERPROFILE%\.jarvis\automations`: each one's command, schedule, and a log
+  of its recent output (capped at 200 KB). The matching Windows Task Scheduler
+  task lives in the `Jarvis` folder. Both stay until you delete the
+  automation, which removes them.
 - **Command history is off.** Jarvis does not record the commands it runs. If
   you set the `JARVIS_COMMAND_LOG` environment variable to a file path, it will
   append each command to that file, on your machine only.
