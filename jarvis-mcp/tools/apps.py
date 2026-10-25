@@ -91,8 +91,10 @@ async def win_close_app(
     name="win_list_running_apps",
     annotations={"title": "List Running Applications", "readOnlyHint": True, "destructiveHint": False},
 )
-async def win_list_running_apps() -> str:
-    """List all currently running processes sorted by memory usage, with PID, CPU%, and RAM."""
+async def win_list_running_apps(
+    limit: int = Field(default=40, description="Number of processes to show (default 40)", ge=1, le=200),
+) -> str:
+    """List the running processes using the most memory, with PID, CPU%, and RAM."""
     def _impl() -> str:
         # cpu_percent needs two samples per process — the first call always
         # returns 0.0. Prime, wait, then read real values.
@@ -118,13 +120,13 @@ async def win_list_running_apps() -> str:
                 pass
 
         processes.sort(key=lambda x: x["mem_mb"], reverse=True)
-        top = processes[:40]
+        top = processes[:limit]
 
         lines = [f"{'PID':>7}  {'Name':<35}  {'CPU%':>5}  {'RAM MB':>7}  Status"]
         lines.append("─" * 70)
         for p in top:
             lines.append(f"{p['pid']:>7}  {p['name']:<35}  {p['cpu']:>5.1f}  {p['mem_mb']:>7.1f}  {p['status']}")
-        lines.append(f"\n{len(processes)} total processes. Showing top 40 by RAM.")
+        lines.append(f"\n{len(processes)} total processes. Showing top {len(top)} by RAM.")
         return "\n".join(lines)
 
     return await asyncio.to_thread(_impl)

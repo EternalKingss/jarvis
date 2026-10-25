@@ -1,14 +1,20 @@
 {
-  "_comment": "Add the 'windows_jarvis' block inside the 'mcpServers' object in your Claude Desktop config.",
-  "_config_location": "C:\\Users\\Eternal\\AppData\\Roaming\\Claude\\claude_desktop_config.json",
+  "_comment": "Manual setup only (the .mcpb extension does this for you). Add the 'windows_jarvis' block inside 'mcpServers' in your Claude Desktop config, and replace C:\\path\\to\\jarvis with where you cloned the repo.",
+  "_config_location": "%APPDATA%\\Claude\\claude_desktop_config.json",
 
   "mcpServers": {
     "windows_jarvis": {
-      "command": "python",
+      "command": "uv",
       "args": [
-        "C:\\Users\\Eternal\\Desktop\\Jarvis\\jarvis-mcp\\server.py"
+        "run",
+        "--directory",
+        "C:\\path\\to\\jarvis",
+        "jarvis-mcp/server.py"
       ],
-      "env": {}
+      "env": {
+        "JARVIS_ALLOW_POWER_ACTIONS": "false",
+        "JARVIS_ALLOW_PERMANENT_DELETE": "false"
+      }
     }
   }
 }

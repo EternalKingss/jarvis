@@ -8,7 +8,7 @@ win_search_files    : Search for files by name or extension
 win_create_folder   : Create a new directory
 win_move_file       : Move or rename a file/folder
 win_copy_file       : Copy a file
-win_delete_file     : Delete a file or folder
+win_delete_file     : Send a file or folder to the Recycle Bin (or erase it, if allowed)
 win_get_file_info   : Metadata for a file/folder
 """
 
@@ -23,6 +23,8 @@ from typing import Optional
 
 from pydantic import Field
 from mcp_instance import mcp
+from utils import settings
+from utils.recycle import send_to_recycle_bin
 
 logger = logging.getLogger(__name__)
 
@@ -327,24 +329,40 @@ async def win_copy_file(
     annotations={"title": "Delete File or Folder", "readOnlyHint": False, "destructiveHint": True},
 )
 async def win_delete_file(
-    path: str = Field(..., description="Path to delete. THIS IS PERMANENT — not sent to Recycle Bin."),
-    recursive: bool = Field(default=False, description="Delete non-empty directories and all contents (default False)."),
+    path: str = Field(..., description="Path of the file or folder to delete."),
+    recursive: bool = Field(default=False, description="Allow deleting a non-empty folder and everything in it (default False)."),
+    permanent: bool = Field(
+        default=False,
+        description="Skip the Recycle Bin and erase for good (default False). Only works if the user enabled permanent delete in the extension settings.",
+    ),
 ) -> str:
-    """Delete a file or folder permanently. Always confirm with the user first."""
+    """Delete a file or folder by moving it to the Recycle Bin, so it can be restored. Always confirm with the user first."""
     p = _expand(path)
     if not os.path.exists(p):
         return f"Path not found: {p}"
+    if os.path.isdir(p) and not recursive and any(os.scandir(p)):
+        return "Directory is not empty. Set recursive=True to delete it and all contents."
+
+    if not permanent:
+        try:
+            await asyncio.to_thread(send_to_recycle_bin, p)
+            return f"Moved to Recycle Bin: {p}"
+        except OSError as e:
+            return f"Not deleted: {e} Use permanent=True to erase it for good (requires the permanent delete setting)."
+
+    if not settings.enabled(settings.ALLOW_PERMANENT_DELETE):
+        return settings.disabled_message(settings.ALLOW_PERMANENT_DELETE)
     try:
         if os.path.isfile(p):
             await asyncio.to_thread(os.remove, p)
-            return f"Deleted file: {p}"
+            return f"Permanently deleted file: {p}"
         elif os.path.isdir(p):
             if recursive:
                 await asyncio.to_thread(shutil.rmtree, p)
-                return f"Deleted directory and all contents: {p}"
+                return f"Permanently deleted directory and all contents: {p}"
             else:
                 await asyncio.to_thread(os.rmdir, p)
-                return f"Deleted empty directory: {p}"
+                return f"Permanently deleted empty directory: {p}"
     except OSError as e:
         if "not empty" in str(e).lower():
             return "Directory is not empty. Set recursive=True to delete it and all contents."

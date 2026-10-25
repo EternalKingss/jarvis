@@ -14,6 +14,7 @@ win_cancel_shutdown     : Cancel a pending shutdown
 """
 
 import asyncio
+import io
 import logging
 import os
 import platform
@@ -22,13 +23,18 @@ from datetime import datetime
 from typing import Literal, Optional
 
 import psutil
+from mcp.server.mcpserver import Image
 from pydantic import Field
 from mcp_instance import mcp
+from utils import settings
 from utils.procs import protected_pids
 from utils.shell import run_command, run_command_async
 
 logger = logging.getLogger(__name__)
 SCREENSHOT_DIR = os.path.join(os.path.expanduser("~"), "Pictures", "Jarvis Screenshots")
+# Longest side of the copy sent to Claude. Larger images cost more tokens
+# without making on-screen text easier to read.
+PREVIEW_MAX_SIDE = 1568
 
 
 @mcp.tool(
@@ -169,7 +175,10 @@ async def win_kill_process(
     identifier: str = Field(..., description="Process name (partial match OK) or numeric PID. E.g. 'chrome', 'notepad', '1234'"),
     force: bool = Field(default=False, description="If True, force-kill immediately. If False (default), try graceful termination first."),
 ) -> str:
-    """Terminate a process by name or PID."""
+    """Terminate a process by name or PID. Requires the 'power actions' extension setting."""
+    if not settings.enabled(settings.ALLOW_POWER_ACTIONS):
+        return settings.disabled_message(settings.ALLOW_POWER_ACTIONS)
+
     def _impl() -> str:
         protected = protected_pids()
         killed = []
@@ -248,9 +257,10 @@ async def win_adjust_volume(
 )
 async def win_take_screenshot(
     save_path: Optional[str] = Field(default=None, description="Where to save the PNG. Defaults to ~/Pictures/Jarvis Screenshots/screenshot_TIMESTAMP.png"),
-) -> str:
-    """Capture the current screen and save it as a PNG file."""
-    def _impl() -> str:
+    include_image: bool = Field(default=True, description="Also return the screenshot so you can see it (default True). Set False to only save the file."),
+):
+    """Capture the current screen, save it as a PNG file, and return the image so you can see what is on screen."""
+    def _impl():
         try:
             from PIL import ImageGrab
         except ImportError:
@@ -280,7 +290,14 @@ async def win_take_screenshot(
             if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
                 return f"Screenshot failed: save reported success but no file at {out_path}"
 
-            return f"Screenshot saved: {out_path}  ({img.width}x{img.height}, {os.path.getsize(out_path):,} bytes)"
+            summary = f"Screenshot saved: {out_path}  ({img.width}x{img.height}, {os.path.getsize(out_path):,} bytes)"
+            if not include_image:
+                return summary
+            preview = img.convert("RGB")
+            preview.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE))
+            buf = io.BytesIO()
+            preview.save(buf, format="JPEG", quality=80)
+            return [summary, Image(data=buf.getvalue(), format="jpeg")]
 
         except Exception as e:
             logger.error(f"win_take_screenshot failed (save_path={save_path!r}): {e}", exc_info=True)
@@ -332,7 +349,9 @@ async def win_get_network_info() -> str:
 async def win_shutdown(
     delay_seconds: int = Field(default=0, description="Seconds before shutdown (0 = immediate)", ge=0, le=3600),
 ) -> str:
-    """Shut down the computer. Always confirm with the user before calling this."""
+    """Shut down the computer. Requires the 'power actions' extension setting. Always confirm with the user first."""
+    if not settings.enabled(settings.ALLOW_POWER_ACTIONS):
+        return settings.disabled_message(settings.ALLOW_POWER_ACTIONS)
     result = await run_command_async(f"shutdown /s /t {delay_seconds}", shell="cmd")
     if result["success"] or result["exit_code"] == 0:
         return f"Shutdown in {delay_seconds}s. Use win_cancel_shutdown to abort." if delay_seconds > 0 else "Shutting down now."
@@ -346,7 +365,9 @@ async def win_shutdown(
 async def win_restart(
     delay_seconds: int = Field(default=0, description="Seconds before restart (0 = immediate)", ge=0, le=3600),
 ) -> str:
-    """Restart the computer. Always confirm with the user before calling this."""
+    """Restart the computer. Requires the 'power actions' extension setting. Always confirm with the user first."""
+    if not settings.enabled(settings.ALLOW_POWER_ACTIONS):
+        return settings.disabled_message(settings.ALLOW_POWER_ACTIONS)
     result = await run_command_async(f"shutdown /r /t {delay_seconds}", shell="cmd")
     if result["success"] or result["exit_code"] == 0:
         return f"Restart in {delay_seconds}s. Use win_cancel_shutdown to abort." if delay_seconds > 0 else "Restarting now."

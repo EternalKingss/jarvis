@@ -2,16 +2,18 @@
 """
 windows_mcp — Jarvis Windows OS Control MCP Server
 ====================================================
-Gives Claude full control over the Windows machine via 45 tools across:
+Gives Claude full control over the Windows machine via 52 tools across:
   - Terminal   : run any cmd/PowerShell command or script
   - Jobs       : start/poll/stop long-running background commands
   - Apps       : open, close, list, switch applications
   - System     : info, processes, volume, screenshot, shutdown/restart/lock
+  - Desktop    : arrange windows, show notifications
+  - Wireless   : Wi-Fi networks, Bluetooth devices and radio
   - Files      : list, read, search, create, move, copy, delete
   - Browser    : open URLs, web search
   - Media      : play/pause/next/prev/stop
   - Clipboard  : get/set clipboard text
-  - Screen     : OCR screen text, active window info
+  - Screen     : OCR screen text (built-in Windows OCR), active window info
   - UI Automation : inspect, click, type into, read and select controls in any app
 
 Transport: stdio (runs as subprocess of Claude Desktop)
@@ -20,7 +22,7 @@ Transport: stdio (runs as subprocess of Claude Desktop)
 import logging
 import sys
 
-# ── Shared FastMCP instance must be imported first ──────────────────────────
+# ── Shared MCPServer instance must be imported first ──────────────────────────
 from mcp_instance import mcp  # noqa: F401
 
 import os
@@ -53,6 +55,9 @@ import tools.screen     # noqa: F401  win_read_screen_text, win_get_active_windo
 import tools.jobs       # noqa: F401  win_start_job, win_job_output, win_stop_job, win_list_jobs
 import tools.uia        # noqa: F401  win_uia_inspect, win_uia_click, win_uia_type_into, win_uia_read,
                         #             win_uia_select, win_uia_focus, win_uia_menu, win_uia_list_windows
+import tools.desktop    # noqa: F401  win_arrange_window, win_notify
+import tools.wireless   # noqa: F401  win_wifi_networks, win_wifi_connect, win_wifi_disconnect,
+                        #             win_bluetooth_devices, win_bluetooth_power
 
 
 if __name__ == "__main__":
