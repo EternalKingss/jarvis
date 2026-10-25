@@ -3,6 +3,8 @@ name = "windows-jarvis"
 version = "1.0.0"
 description = "Windows OS control for Claude: terminal, apps, files, system, screen and UI automation."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     # mcp 2.x renamed FastMCP to MCPServer; stay on 1.x until the code is migrated.
