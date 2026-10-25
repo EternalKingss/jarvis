@@ -2,7 +2,7 @@
 """
 windows_mcp — Jarvis Windows OS Control MCP Server
 ====================================================
-Gives Claude full control over the Windows machine via 37 tools across:
+Gives Claude full control over the Windows machine via 45 tools across:
   - Terminal   : run any cmd/PowerShell command or script
   - Jobs       : start/poll/stop long-running background commands
   - Apps       : open, close, list, switch applications
@@ -12,6 +12,7 @@ Gives Claude full control over the Windows machine via 37 tools across:
   - Media      : play/pause/next/prev/stop
   - Clipboard  : get/set clipboard text
   - Screen     : OCR screen text, active window info
+  - UI Automation : inspect, click, type into, read and select controls in any app
 
 Transport: stdio (runs as subprocess of Claude Desktop)
 """
@@ -50,6 +51,8 @@ import tools.media      # noqa: F401  win_media_control
 import tools.clipboard  # noqa: F401  win_get_clipboard, win_set_clipboard
 import tools.screen     # noqa: F401  win_read_screen_text, win_get_active_window
 import tools.jobs       # noqa: F401  win_start_job, win_job_output, win_stop_job, win_list_jobs
+import tools.uia        # noqa: F401  win_uia_inspect, win_uia_click, win_uia_type_into, win_uia_read,
+                        #             win_uia_select, win_uia_focus, win_uia_menu, win_uia_list_windows
 
 
 if __name__ == "__main__":

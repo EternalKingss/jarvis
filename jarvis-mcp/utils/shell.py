@@ -2,7 +2,7 @@
 Shell executor utility.
 Runs commands in cmd or PowerShell, returns structured output.
 No artificial blocking — Claude handles confirmation in conversation.
-Everything is logged.
+Command history is NOT recorded unless JARVIS_COMMAND_LOG names a log file.
 """
 
 import asyncio
@@ -20,7 +20,10 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
-LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "command_history.log")
+# Opt-in only. The directory policy forbids collecting conversation data "even
+# for logging purposes", so commands are not written anywhere by default. Set
+# JARVIS_COMMAND_LOG to a file path to keep a local history while debugging.
+LOG_FILE = os.environ.get("JARVIS_COMMAND_LOG", "").strip()
 
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -157,7 +160,9 @@ def build_shell_args(command: str, shell: str) -> list[str]:
 
 
 def _log_command(command: str, shell: str, working_dir: str, exit_code: int) -> None:
-    """Append executed command to history log. Rotates at 5 MB."""
+    """Append executed command to the opt-in history log. Rotates at 5 MB."""
+    if not LOG_FILE:
+        return
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) >= LOG_MAX_BYTES:

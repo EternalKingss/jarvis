@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 def _expand(path: str) -> str:
     return os.path.expandvars(os.path.expanduser(path))
 
+def _final_destination(src: str, dst: str) -> str:
+    """Where shutil.move/copy2 will actually write: into dst when it is a folder."""
+    if os.path.isdir(dst):
+        return os.path.join(dst, os.path.basename(os.path.normpath(src)))
+    return dst
+
 def _size_str(b: int) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if b < 1024:
@@ -276,12 +282,15 @@ async def win_create_folder(
 )
 async def win_move_file(
     source: str = Field(..., description="Current path of the file or folder to move/rename."),
-    destination: str = Field(..., description="Target path or folder. If a directory, file is moved into it."),
+    destination: str = Field(..., description="Target path or folder. If a directory, file is moved into it. Fails if the target already exists."),
 ) -> str:
-    """Move a file or folder to a new location, or rename it."""
+    """Move a file or folder to a new location, or rename it. Never overwrites an existing file."""
     src, dst = _expand(source), _expand(destination)
     if not os.path.exists(src):
         return f"Source not found: {src}"
+    target = _final_destination(src, dst)
+    if os.path.exists(target):
+        return f"Destination already exists: {target}. Delete it first with win_delete_file, or pick another name."
     try:
         await asyncio.to_thread(shutil.move, src, dst)
         return f"Moved: {src}  →  {dst}"
@@ -295,14 +304,17 @@ async def win_move_file(
 )
 async def win_copy_file(
     source: str = Field(..., description="File to copy."),
-    destination: str = Field(..., description="Target path or folder."),
+    destination: str = Field(..., description="Target path or folder. Fails if the target already exists."),
 ) -> str:
-    """Copy a file to a new location."""
+    """Copy a file to a new location. Never overwrites an existing file."""
     src, dst = _expand(source), _expand(destination)
     if not os.path.exists(src):
         return f"Source not found: {src}"
     if os.path.isdir(src):
         return "Use win_run_command with 'robocopy' to copy whole directories."
+    target = _final_destination(src, dst)
+    if os.path.exists(target):
+        return f"Destination already exists: {target}. Delete it first with win_delete_file, or pick another name."
     try:
         result = await asyncio.to_thread(shutil.copy2, src, dst)
         return f"Copied: {src}  →  {result}"

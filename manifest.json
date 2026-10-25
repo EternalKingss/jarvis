@@ -1,0 +1,235 @@
+{
+  "manifest_version": "0.4",
+  "name": "windows-jarvis",
+  "display_name": "Windows Jarvis",
+  "version": "1.0.0",
+  "description": "Control your Windows PC from Claude: run commands, manage files and apps, read the screen and automate any app's UI.",
+  "long_description": "Windows Jarvis gives Claude hands-on control of a Windows 10/11 machine through 45 local tools: PowerShell/CMD commands and background jobs, opening and closing apps, files and folders, system info and processes, volume and media keys, clipboard, screenshots and OCR, and Microsoft UI Automation (click, type, read and select controls in any app).\n\nEverything runs locally on your computer. Jarvis sends nothing to any server and collects no data. Tools that change or delete things (commands, deleting files, killing processes, shutdown) are marked destructive so Claude asks before running them.\n\nOCR (win_read_screen_text) needs the free Tesseract engine installed separately; every other tool works out of the box.",
+  "author": {
+    "name": "EternalKingss",
+    "url": "https://github.com/EternalKingss"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EternalKingss/jarvis.git"
+  },
+  "homepage": "https://github.com/EternalKingss/jarvis",
+  "documentation": "https://github.com/EternalKingss/jarvis#readme",
+  "support": "https://github.com/EternalKingss/jarvis/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "jarvis-mcp/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "jarvis-mcp/server.py"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "win_run_command",
+      "description": "Execute any command in Windows PowerShell or CMD and return the full output."
+    },
+    {
+      "name": "win_run_script",
+      "description": "Execute a multi-line PowerShell script block and return the full output."
+    },
+    {
+      "name": "win_open_app",
+      "description": "Find and open any installed application by name."
+    },
+    {
+      "name": "win_close_app",
+      "description": "Close a running application."
+    },
+    {
+      "name": "win_list_running_apps",
+      "description": "List all currently running processes sorted by memory usage, with PID, CPU%, and RAM."
+    },
+    {
+      "name": "win_switch_to_app",
+      "description": "Bring an application window to the foreground (focus it)."
+    },
+    {
+      "name": "win_list_installed",
+      "description": "List applications installed on the machine from Start Menu shortcuts."
+    },
+    {
+      "name": "win_get_system_info",
+      "description": "Get comprehensive system info: CPU, RAM, disks, GPU, OS version, uptime, battery."
+    },
+    {
+      "name": "win_list_processes",
+      "description": "List running processes with CPU, memory usage, PID, and status."
+    },
+    {
+      "name": "win_kill_process",
+      "description": "Terminate a process by name or PID."
+    },
+    {
+      "name": "win_adjust_volume",
+      "description": "Control system volume: raise, lower, mute, or unmute."
+    },
+    {
+      "name": "win_take_screenshot",
+      "description": "Capture the current screen and save it as a PNG file."
+    },
+    {
+      "name": "win_get_network_info",
+      "description": "Get network configuration: IP addresses, Wi-Fi SSID/signal, and active connections."
+    },
+    {
+      "name": "win_shutdown",
+      "description": "Shut down the computer."
+    },
+    {
+      "name": "win_restart",
+      "description": "Restart the computer."
+    },
+    {
+      "name": "win_cancel_shutdown",
+      "description": "Cancel a pending scheduled shutdown or restart."
+    },
+    {
+      "name": "win_lock",
+      "description": "Lock the Windows workstation (shows login screen)."
+    },
+    {
+      "name": "win_list_directory",
+      "description": "List the contents of a directory with sizes and modification dates."
+    },
+    {
+      "name": "win_read_file",
+      "description": "Read and return the text content of a file."
+    },
+    {
+      "name": "win_write_file",
+      "description": "Write text to a file."
+    },
+    {
+      "name": "win_search_files",
+      "description": "Search for files by name or wildcard pattern across a directory tree."
+    },
+    {
+      "name": "win_create_folder",
+      "description": "Create a new directory (and any missing parent directories)."
+    },
+    {
+      "name": "win_move_file",
+      "description": "Move a file or folder to a new location, or rename it."
+    },
+    {
+      "name": "win_copy_file",
+      "description": "Copy a file to a new location."
+    },
+    {
+      "name": "win_delete_file",
+      "description": "Delete a file or folder permanently."
+    },
+    {
+      "name": "win_get_file_info",
+      "description": "Get metadata for a file or directory: size, created/modified dates, type."
+    },
+    {
+      "name": "win_open_url",
+      "description": "Open a URL in the user's default web browser."
+    },
+    {
+      "name": "win_search_web",
+      "description": "Open a web search in the default browser."
+    },
+    {
+      "name": "win_media_control",
+      "description": "Send a system media key command."
+    },
+    {
+      "name": "win_get_clipboard",
+      "description": "Read and return the current text content of the Windows clipboard."
+    },
+    {
+      "name": "win_set_clipboard",
+      "description": "Write text to the Windows clipboard."
+    },
+    {
+      "name": "win_read_screen_text",
+      "description": "Capture the current screen and extract all visible text using OCR (Tesseract)."
+    },
+    {
+      "name": "win_get_active_window",
+      "description": "Get the title and process name of the currently focused window."
+    },
+    {
+      "name": "win_start_job",
+      "description": "Launch a command as a background job and return a job_id immediately."
+    },
+    {
+      "name": "win_job_output",
+      "description": "Poll a background job: returns new output since your last call plus live status (running / exited + exit code)."
+    },
+    {
+      "name": "win_stop_job",
+      "description": "Kill a running background job and its entire process tree."
+    },
+    {
+      "name": "win_list_jobs",
+      "description": "List every background job started this session with its current status."
+    },
+    {
+      "name": "win_uia_inspect",
+      "description": "Inspect the UI element tree of any open window."
+    },
+    {
+      "name": "win_uia_click",
+      "description": "Click any UI element (button, link, tab, menu item) inside a Windows app by its name."
+    },
+    {
+      "name": "win_uia_type_into",
+      "description": "Type text into a specific input field, text box, or search bar inside any Windows app."
+    },
+    {
+      "name": "win_uia_read",
+      "description": "Read the text or value from a UI element inside any Windows app."
+    },
+    {
+      "name": "win_uia_select",
+      "description": "Select an item from a dropdown, list box, combo box, or tab control inside any Windows app."
+    },
+    {
+      "name": "win_uia_focus",
+      "description": "Bring a window to the front and give it focus."
+    },
+    {
+      "name": "win_uia_menu",
+      "description": "Click through an app's menu bar."
+    },
+    {
+      "name": "win_uia_list_windows",
+      "description": "List all open windows that UI Automation can see, with their titles."
+    }
+  ],
+  "keywords": [
+    "windows",
+    "automation",
+    "powershell",
+    "files",
+    "ui-automation",
+    "system",
+    "desktop"
+  ],
+  "privacy_policies": [
+    "https://github.com/EternalKingss/jarvis/blob/main/PRIVACY.md"
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}

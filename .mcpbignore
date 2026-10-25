@@ -1,0 +1,15 @@
+.git/
+.github/
+.venv/
+.ruff_cache/
+.pytest_cache/
+tests/
+dist/
+*.mcpb
+__pycache__/
+*.pyc
+*.bak
+*.prepatch
+command_history.log*
+jarvis-mcp/claude_desktop_config.json
+jarvis-mcp/requirements.txt
