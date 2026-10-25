@@ -221,6 +221,7 @@
     "system",
     "desktop"
   ],
+  "license": "MIT",
   "privacy_policies": [
     "https://github.com/EternalKingss/jarvis/blob/main/PRIVACY.md"
   ],

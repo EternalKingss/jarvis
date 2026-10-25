@@ -80,6 +80,10 @@ Pillow, pywinauto) or a Windows API, and returns plain text to Claude.
 Report bugs and security issues at
 <https://github.com/EternalKingss/jarvis/issues>.
 
+## License
+
+[MIT](LICENSE)
+
 ## Development
 
 ```
