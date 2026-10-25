@@ -10,3 +10,9 @@ command_history.log
 command_history.log.bak
 *.bak
 *.prepatch
+# local environment and build output
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+*.mcpb

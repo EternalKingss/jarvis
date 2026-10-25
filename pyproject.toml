@@ -1,0 +1,31 @@
+[project]
+name = "windows-jarvis"
+version = "1.0.0"
+description = "Windows OS control for Claude: terminal, apps, files, system, screen and UI automation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # mcp 2.x renamed FastMCP to MCPServer; stay on 1.x until the code is migrated.
+    "mcp>=1.27.0,<2",
+    "pydantic>=2.11.0",
+    "psutil>=7.0.0",
+    "pyperclip>=1.9.0",
+    "pillow>=11.0.0",
+    "pytesseract>=0.3.13",
+    "pywinauto>=0.6.9; sys_platform == 'win32'",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.ruff.lint]
+# Ruff 0.17 widened its default rule set; keep CI on the classic error checks.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tool modules are imported after _backfill_env() on purpose.
+"jarvis-mcp/server.py" = ["E402"]
+
+[tool.uv]
+# Not an installable package: the MCPB host runs jarvis-mcp/server.py directly.
+package = false
