@@ -1,9 +1,10 @@
 # Windows Jarvis
 
 Control your Windows PC from Claude. Jarvis is a local MCP server that gives
-Claude Desktop 52 tools for the terminal, apps and windows, files, system,
-screen, clipboard, media, Wi-Fi and Bluetooth, notifications and Microsoft UI
-Automation on Windows 10 and 11.
+Claude Desktop 67 tools for the terminal, apps and windows, files and
+documents, Windows settings, scheduled automations, screen, clipboard, media,
+Wi-Fi and Bluetooth, notifications and Microsoft UI Automation on Windows 10
+and 11.
 
 Everything runs on your own computer. Jarvis has no accounts, no telemetry and
 no remote server. See [PRIVACY.md](PRIVACY.md).
@@ -21,13 +22,14 @@ Nothing else to install: screen OCR uses the engine built into Windows.
 
 ## Settings
 
-Open **Settings > Extensions > Windows Jarvis** to change these. Both are off
+Open **Settings > Extensions > Windows Jarvis** to change these. All are off
 by default.
 
 | Setting | What it allows |
 |---------|----------------|
 | Allow shutdown, restart and killing processes | `win_shutdown`, `win_restart`, `win_kill_process` |
 | Allow permanent delete (skip the Recycle Bin) | `win_delete_file` with `permanent=True` |
+| Allow scheduled automations | `win_automation_create`, `win_automation_run_now` |
 
 While a setting is off, the tool replies that the action is turned off and
 where to enable it.
@@ -41,6 +43,9 @@ where to enable it.
 - "Take a screenshot and tell me what error the open dialog is showing."
 - "Put Chrome on the left half of the screen and VS Code on the right."
 - "Which Wi-Fi networks are nearby, and switch me to the strongest saved one."
+- "Every weekday at 6pm, move screenshots older than a week from my Desktop into Pictures\Old."
+- "Set brightness to 40%, switch to dark mode and turn Spotify down to 30%."
+- "Find every file in my Documents that mentions 'invoice 2026' and summarize the PDFs."
 
 ## Tools
 
@@ -54,6 +59,9 @@ check with you before using them.
 | Jobs | `win_job_output`, `win_list_jobs` | | `win_start_job`, `win_stop_job` |
 | Apps | `win_list_running_apps`, `win_list_installed` | `win_open_app`, `win_switch_to_app` | `win_close_app` |
 | Desktop | | `win_arrange_window`, `win_notify` | |
+| Automations | `win_automation_list`, `win_automation_history` | | `win_automation_create`\*, `win_automation_run_now`\*, `win_automation_delete` |
+| Settings | | `win_brightness`, `win_theme`, `win_volume_level`, `win_audio_output`, `win_power_plan` | |
+| Documents | `win_search_in_files`, `win_read_document` | `win_zip`, `win_unzip`, `win_open_file` | |
 | System | `win_get_system_info`, `win_list_processes`, `win_get_network_info` | `win_adjust_volume`, `win_take_screenshot`, `win_cancel_shutdown`, `win_lock` | `win_kill_process`\*, `win_shutdown`\*, `win_restart`\* |
 | Files | `win_list_directory`, `win_read_file`, `win_search_files`, `win_get_file_info` | `win_create_folder`, `win_move_file`, `win_copy_file` | `win_write_file`, `win_delete_file` |
 | Browser | | `win_open_url`, `win_search_web` | |
@@ -72,8 +80,22 @@ Notes:
   unless permanent delete is enabled.
 - `win_move_file` and `win_copy_file` never overwrite. If the target exists
   they stop and say so.
-- `win_take_screenshot` saves a PNG and also shows Claude a downscaled copy,
-  so it can see what is on screen.
+- `win_take_screenshot` captures the primary screen, one window, a region or
+  all monitors, saves a PNG and also shows Claude a downscaled copy.
+  `win_read_screen_text` can read just one window.
+- Automations are Windows Task Scheduler tasks in a `Jarvis` folder. They run
+  as you, without admin rights, only while you're signed in, and keep running
+  when Claude is closed. Jarvis only lists, runs or deletes tasks in that
+  folder. Each one's command, schedule and output are shown by
+  `win_automation_list` and `win_automation_history`, and you can also see or
+  remove them in Task Scheduler > Task Scheduler Library > Jarvis. These are
+  separate from Claude's own scheduled tasks.
+- `win_zip` and `win_unzip` never overwrite files, and `win_unzip` refuses
+  archives that try to write outside the target folder.
+- `win_open_file` opens documents, images and folders, never programs or
+  scripts.
+- `win_brightness` works on laptop screens and on external monitors that have
+  DDC/CI turned on in their own menu.
 - `win_wifi_connect` works with saved networks. Join a new network once from
   the Windows Wi-Fi menu so its password is stored.
 - `win_wifi_disconnect` and `win_bluetooth_power` can cut your connection to
@@ -97,6 +119,8 @@ an image) to Claude.
 | A tool says the action is turned off | Enable the matching option in [Settings](#settings). |
 | `win_read_screen_text` says no OCR language is installed | Settings > Time & language > Language & region > your language > Language options > add Optical character recognition. |
 | `win_wifi_networks` shows no nearby networks | Turn on Settings > Privacy & security > Location > "Let desktop apps access your location". Windows requires it for Wi-Fi scans. |
+| An automation never seems to run | Check `win_automation_history`. Automations only run while you're signed in; a PC that's off or asleep runs a missed one at the next chance. |
+| Brightness can't be changed | External monitors need DDC/CI enabled in the monitor's on-screen menu. |
 | Notifications don't appear | Check Settings > System > Notifications, and that Focus / Do not disturb is off. They show under "Windows PowerShell". |
 | A UI Automation tool can't find a window | Run `win_uia_list_windows` and use part of a title it shows. Some apps running as administrator are hidden from non-admin processes. |
 | A command works in your terminal but not in Jarvis | Jarvis runs non-interactively. Commands that prompt for input will hang; use `win_start_job` and `win_stop_job` for long or interactive ones. |
@@ -120,8 +144,8 @@ uv run jarvis-mcp/server.py
 ```
 
 Settings are read from environment variables, so for a local run set
-`JARVIS_ALLOW_POWER_ACTIONS=true` or `JARVIS_ALLOW_PERMANENT_DELETE=true` to
-switch them on.
+`JARVIS_ALLOW_POWER_ACTIONS`, `JARVIS_ALLOW_PERMANENT_DELETE` or
+`JARVIS_ALLOW_AUTOMATIONS` to `true` to switch them on.
 
 Without uv: `pip install -r jarvis-mcp/requirements.txt`, then point an
 `mcpServers` entry at `jarvis-mcp/server.py` (see

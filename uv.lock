@@ -689,6 +689,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pycaw"
+version = "20260927"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "comtypes" },
+    { name = "psutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9e/51/2870619bf47cef359505d88d277b71c18ae5af18ffe94e707dbce6def6c2/pycaw-20260927.tar.gz", hash = "sha256:3a833ace1a76d0cee134366366d64c56ea9552ebc6f572580e4299ad552743f6", size = 29644, upload-time = "2026-09-26T20:05:02.191Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/79/baf93a0a0b53a886f6a84ac05dd8491068c8a7c54db4ccd247acdcff9d1c/pycaw-20260927-py3-none-any.whl", hash = "sha256:d5b162a87536956af8dfa0fc53b1c77870a30706445ffd7f92a2ed184f65ddf4", size = 28463, upload-time = "2026-09-26T20:05:00.817Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.11"
 source = { registry = "https://pypi.org/simple" }
@@ -900,6 +913,18 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.21.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/28/081f1cbcca7042441dafc8de00f48ba60853f89e5bff92c5f26477346d81/pypdf-6.21.2.tar.gz", hash = "sha256:0a3e1c5c886a1be03646c16a04827cc166c2a0575c971b26a4bf89686551c2d4", size = 7144571, upload-time = "2026-10-21T16:44:55.272Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/4d/c9d2d67f204eff463237a1a8f5e25a6923b7b1043982b91fcaf104c8ef60/pypdf-6.21.2-py3-none-any.whl", hash = "sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084", size = 407766, upload-time = "2026-10-21T16:44:53.626Z" },
 ]
 
 [[package]]
@@ -1457,14 +1482,16 @@ wheels = [
 
 [[package]]
 name = "windows-jarvis"
-version = "1.1.0"
+version = "1.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "psutil" },
+    { name = "pycaw", marker = "sys_platform == 'win32'" },
     { name = "pydantic" },
+    { name = "pypdf" },
     { name = "pyperclip" },
     { name = "pywinauto", marker = "sys_platform == 'win32'" },
 ]
@@ -1480,7 +1507,9 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.3.0,<3" },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "psutil", specifier = ">=7.0.0" },
+    { name = "pycaw", marker = "sys_platform == 'win32'", specifier = ">=20240316" },
     { name = "pydantic", specifier = ">=2.12.0" },
+    { name = "pypdf", specifier = ">=5.0.0" },
     { name = "pyperclip", specifier = ">=1.9.0" },
     { name = "pywinauto", marker = "sys_platform == 'win32'", specifier = ">=0.6.9" },
 ]

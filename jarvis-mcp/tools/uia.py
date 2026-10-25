@@ -3,40 +3,20 @@ Microsoft UI Automation tools for windows_jarvis.
 Uses pywinauto (UIA backend) to read and control any Windows app's UI elements.
 This lets Jarvis interact with buttons, inputs, menus, dialogs — anything visible.
 
-pywinauto talks to UI Automation over COM, and COM must be initialised on the
-thread that uses it. The MCP SDK runs tool handlers on arbitrary worker
-threads, so every UIA call is funnelled through one dedicated thread that
-initialises COM once (_UIA_EXECUTOR).
+pywinauto talks to UI Automation over COM, so every UIA call runs on the
+shared COM thread (utils.com.run_com).
 """
 
-import asyncio
 import contextlib
 import io
 import re
-import sys
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from pydantic import Field
 from mcp_instance import mcp
+from utils.com import run_com
 
 _MAX_OUTPUT_CHARS = 6000
-
-
-def _init_com() -> None:
-    if sys.platform == "win32":
-        try:
-            import pythoncom  # shipped with pywin32, a pywinauto dependency
-            pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
-        except ImportError:
-            pass
-
-
-_UIA_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="uia", initializer=_init_com)
-
-
-async def _on_uia_thread(fn):
-    return await asyncio.get_running_loop().run_in_executor(_UIA_EXECUTOR, fn)
 
 
 def _cap(text: str, hint: str) -> str:
@@ -126,7 +106,7 @@ async def win_uia_inspect(
         except Exception as e:
             return f"❌ Could not inspect window '{window_title}': {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Click ─────────────────────────────────────────────────────────────────────
@@ -163,7 +143,7 @@ async def win_uia_click(
         except Exception as e:
             return f"❌ Click failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Type ──────────────────────────────────────────────────────────────────────
@@ -199,7 +179,7 @@ async def win_uia_type_into(
         except Exception as e:
             return f"❌ Type failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Read ──────────────────────────────────────────────────────────────────────
@@ -263,7 +243,7 @@ async def win_uia_read(
         except Exception as e:
             return f"❌ Read failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Select ────────────────────────────────────────────────────────────────────
@@ -295,7 +275,7 @@ async def win_uia_select(
         except Exception as e:
             return f"❌ Select failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Focus / Bring to front ────────────────────────────────────────────────────
@@ -317,7 +297,7 @@ async def win_uia_focus(
         except Exception as e:
             return f"❌ Focus failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Menu navigation ───────────────────────────────────────────────────────────
@@ -348,7 +328,7 @@ async def win_uia_menu(
         except Exception as e:
             return f"❌ Menu navigation failed: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)
 
 
 # ── Get window list ───────────────────────────────────────────────────────────
@@ -376,4 +356,4 @@ async def win_uia_list_windows() -> str:
         except Exception as e:
             return f"❌ Could not list windows: {e}"
 
-    return await _on_uia_thread(_impl)
+    return await run_com(_impl)

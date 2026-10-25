@@ -2,14 +2,15 @@
 """
 windows_mcp — Jarvis Windows OS Control MCP Server
 ====================================================
-Gives Claude full control over the Windows machine via 52 tools across:
+Gives Claude full control over the Windows machine via 67 tools across:
   - Terminal   : run any cmd/PowerShell command or script
   - Jobs       : start/poll/stop long-running background commands
   - Apps       : open, close, list, switch applications
   - System     : info, processes, volume, screenshot, shutdown/restart/lock
-  - Desktop    : arrange windows, show notifications
+  - Desktop    : arrange windows, show notifications, scheduled automations
+  - Settings   : brightness, light/dark mode, volume per app, audio output, power plan
   - Wireless   : Wi-Fi networks, Bluetooth devices and radio
-  - Files      : list, read, search, create, move, copy, delete
+  - Files      : list, read, search, create, move, copy, delete; search inside, zip, open, read PDF/Word
   - Browser    : open URLs, web search
   - Media      : play/pause/next/prev/stop
   - Clipboard  : get/set clipboard text
@@ -58,6 +59,10 @@ import tools.uia        # noqa: F401  win_uia_inspect, win_uia_click, win_uia_ty
 import tools.desktop    # noqa: F401  win_arrange_window, win_notify
 import tools.wireless   # noqa: F401  win_wifi_networks, win_wifi_connect, win_wifi_disconnect,
                         #             win_bluetooth_devices, win_bluetooth_power
+import tools.automations  # noqa: F401  win_automation_create, win_automation_list, win_automation_run_now,
+                          #             win_automation_history, win_automation_delete
+import tools.winsettings  # noqa: F401  win_brightness, win_theme, win_volume_level, win_audio_output, win_power_plan
+import tools.documents    # noqa: F401  win_search_in_files, win_zip, win_unzip, win_open_file, win_read_document
 
 
 if __name__ == "__main__":
