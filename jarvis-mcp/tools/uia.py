@@ -2,14 +2,47 @@
 Microsoft UI Automation tools for windows_jarvis.
 Uses pywinauto (UIA backend) to read and control any Windows app's UI elements.
 This lets Jarvis interact with buttons, inputs, menus, dialogs — anything visible.
+
+pywinauto talks to UI Automation over COM, and COM must be initialised on the
+thread that uses it. The MCP SDK runs tool handlers on arbitrary worker
+threads, so every UIA call is funnelled through one dedicated thread that
+initialises COM once (_UIA_EXECUTOR).
 """
 
+import asyncio
+import contextlib
 import io
 import re
-import contextlib
-from pydantic import Field
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
+
+from pydantic import Field
 from mcp_instance import mcp
+
+_MAX_OUTPUT_CHARS = 6000
+
+
+def _init_com() -> None:
+    if sys.platform == "win32":
+        try:
+            import pythoncom  # shipped with pywin32, a pywinauto dependency
+            pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
+        except ImportError:
+            pass
+
+
+_UIA_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="uia", initializer=_init_com)
+
+
+async def _on_uia_thread(fn):
+    return await asyncio.get_running_loop().run_in_executor(_UIA_EXECUTOR, fn)
+
+
+def _cap(text: str, hint: str) -> str:
+    if len(text) <= _MAX_OUTPUT_CHARS:
+        return text
+    return text[:_MAX_OUTPUT_CHARS] + f"\n\n[...truncated, {len(text) - _MAX_OUTPUT_CHARS} more chars — {hint}]"
 
 
 def _get_desktop():
@@ -69,7 +102,7 @@ def _find_control(win, title: str, control_type: Optional[str] = None):
         "use this to discover what's clickable before interacting."
     ),
 )
-def win_uia_inspect(
+async def win_uia_inspect(
     window_title: str = Field(
         ...,
         description="Partial or full title of the window to inspect (e.g. 'Notepad', 'Chrome', 'Settings').",
@@ -81,23 +114,19 @@ def win_uia_inspect(
         le=8,
     ),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists", timeout=5)
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists", timeout=5)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                win.print_control_identifiers(depth=max_depth)
+            output = _cap(buf.getvalue(), "use a smaller max_depth or a more specific window")
+            return f"UI tree for '{window_title}':\n\n{output}"
+        except Exception as e:
+            return f"❌ Could not inspect window '{window_title}': {e}"
 
-        # Capture print_control_identifiers output
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            win.print_control_identifiers(depth=max_depth)
-        output = buf.getvalue()
-
-        # Trim if very long
-        if len(output) > 6000:
-            output = output[:6000] + "\n\n[...truncated — use smaller max_depth or a more specific window]"
-
-        return f"UI tree for '{window_title}':\n\n{output}"
-    except Exception as e:
-        return f"❌ Could not inspect window '{window_title}': {e}"
+    return await _on_uia_thread(_impl)
 
 
 # ── Click ─────────────────────────────────────────────────────────────────────
@@ -111,7 +140,7 @@ def win_uia_inspect(
         "Use win_uia_inspect first to find the exact control name."
     ),
 )
-def win_uia_click(
+async def win_uia_click(
     window_title: str = Field(..., description="Partial or full title of the window."),
     control_title: str = Field(..., description="Exact or partial title of the control to click."),
     control_type: str = Field(
@@ -120,18 +149,21 @@ def win_uia_click(
     ),
     double_click: bool = Field(default=False, description="If True, double-click instead of single click."),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists visible", timeout=5)
-        ctrl = _find_control(win, control_title, control_type or None)
-        ctrl.wait("exists enabled", timeout=5)
-        if double_click:
-            ctrl.double_click_input()
-        else:
-            ctrl.click_input()
-        return f"✅ Clicked '{control_title}' in '{window_title}'"
-    except Exception as e:
-        return f"❌ Click failed: {e}"
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists visible", timeout=5)
+            ctrl = _find_control(win, control_title, control_type or None)
+            ctrl.wait("exists enabled", timeout=5)
+            if double_click:
+                ctrl.double_click_input()
+            else:
+                ctrl.click_input()
+            return f"✅ Clicked '{control_title}' in '{window_title}'"
+        except Exception as e:
+            return f"❌ Click failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Type ──────────────────────────────────────────────────────────────────────
@@ -144,30 +176,52 @@ def win_uia_click(
         "Use win_uia_inspect to find the control name first."
     ),
 )
-def win_uia_type_into(
+async def win_uia_type_into(
     window_title: str = Field(..., description="Partial or full title of the window."),
     control_title: str = Field(..., description="Title/name of the input field to type into."),
     text: str = Field(..., description="Text to type."),
     clear_first: bool = Field(default=True, description="If True, clears existing text before typing."),
     press_enter: bool = Field(default=False, description="If True, presses Enter after typing."),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists visible", timeout=5)
-        ctrl = _find_control(win, control_title, "Edit")
-        ctrl.wait("exists enabled", timeout=5)
-        ctrl.click_input()
-        if clear_first:
-            ctrl.type_keys("^a{DELETE}", with_spaces=True)
-        ctrl.type_keys(text, with_spaces=True)
-        if press_enter:
-            ctrl.type_keys("{ENTER}")
-        return f"✅ Typed into '{control_title}' in '{window_title}'"
-    except Exception as e:
-        return f"❌ Type failed: {e}"
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists visible", timeout=5)
+            ctrl = _find_control(win, control_title, "Edit")
+            ctrl.wait("exists enabled", timeout=5)
+            ctrl.click_input()
+            if clear_first:
+                ctrl.type_keys("^a{DELETE}", with_spaces=True)
+            ctrl.type_keys(text, with_spaces=True)
+            if press_enter:
+                ctrl.type_keys("{ENTER}")
+            return f"✅ Typed into '{control_title}' in '{window_title}'"
+        except Exception as e:
+            return f"❌ Type failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Read ──────────────────────────────────────────────────────────────────────
+
+def _control_value(ctrl) -> str:
+    """Best text for a control: its value (edits, combos) if it has one, else its label."""
+    try:
+        wrapper = ctrl.wrapper_object()
+    except Exception:
+        wrapper = ctrl
+    for getter in ("get_value", "window_text"):
+        fn = getattr(wrapper, getter, None)
+        if fn is None:
+            continue
+        try:
+            value = fn()
+        except Exception:
+            continue
+        if value:
+            return str(value)
+    return ""
+
 
 @mcp.tool(
     name="win_uia_read",
@@ -177,36 +231,39 @@ def win_uia_type_into(
         "Works for labels, input fields, status bars, list items, etc."
     ),
 )
-def win_uia_read(
+async def win_uia_read(
     window_title: str = Field(..., description="Partial or full title of the window."),
     control_title: str = Field(
         default="",
         description="Title of the specific control to read. Leave blank to read all visible text in the window.",
     ),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists", timeout=5)
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists", timeout=5)
 
-        if not control_title:
-            # Read all text from the window
-            texts = []
-            for ctrl in win.descendants():
-                try:
-                    t = ctrl.window_text()
-                    if t and t.strip():
-                        texts.append(t.strip())
-                except Exception:
-                    pass
-            seen = list(dict.fromkeys(texts))  # deduplicate preserving order
-            return f"Text in '{window_title}':\n\n" + "\n".join(seen[:100])
+            if not control_title:
+                texts = []
+                for ctrl in win.descendants():
+                    try:
+                        t = ctrl.window_text()
+                        if t and t.strip():
+                            texts.append(t.strip())
+                    except Exception:
+                        pass
+                seen = list(dict.fromkeys(texts))  # deduplicate preserving order
+                body = _cap("\n".join(seen), "name a control_title to read just one element")
+                return f"Text in '{window_title}':\n\n{body}"
 
-        ctrl = _find_control(win, control_title)
-        ctrl.wait("exists", timeout=5)
-        value = ctrl.window_text() or ctrl.get_value() if hasattr(ctrl, "get_value") else ctrl.window_text()
-        return f"Value of '{control_title}': {value}"
-    except Exception as e:
-        return f"❌ Read failed: {e}"
+            ctrl = _find_control(win, control_title)
+            ctrl.wait("exists", timeout=5)
+            value = _control_value(ctrl)
+            return f"Value of '{control_title}': {value}" if value else f"'{control_title}' has no text or value."
+        except Exception as e:
+            return f"❌ Read failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Select ────────────────────────────────────────────────────────────────────
@@ -218,7 +275,7 @@ def win_uia_read(
         "Select an item from a dropdown, list box, combo box, or tab control inside any Windows app."
     ),
 )
-def win_uia_select(
+async def win_uia_select(
     window_title: str = Field(..., description="Partial or full title of the window."),
     control_title: str = Field(..., description="Title/name of the dropdown, list, or tab control."),
     item: str = Field(..., description="The item to select (by its visible text)."),
@@ -227,15 +284,18 @@ def win_uia_select(
         description="Control type: 'ComboBox', 'ListBox', 'TabControl', 'List', etc.",
     ),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists visible", timeout=5)
-        ctrl = _find_control(win, control_title, control_type or None)
-        ctrl.wait("exists enabled", timeout=5)
-        ctrl.select(item)
-        return f"✅ Selected '{item}' in '{control_title}'"
-    except Exception as e:
-        return f"❌ Select failed: {e}"
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists visible", timeout=5)
+            ctrl = _find_control(win, control_title, control_type or None)
+            ctrl.wait("exists enabled", timeout=5)
+            ctrl.select(item)
+            return f"✅ Selected '{item}' in '{control_title}'"
+        except Exception as e:
+            return f"❌ Select failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Focus / Bring to front ────────────────────────────────────────────────────
@@ -245,17 +305,19 @@ def win_uia_select(
     annotations={"title": "Focus Window", "readOnlyHint": False, "destructiveHint": False},
     description="Bring a window to the front and give it focus.",
 )
-def win_uia_focus(
+async def win_uia_focus(
     window_title: str = Field(..., description="Partial or full title of the window to focus."),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists", timeout=5)
-        win.set_focus()
-        win.bring_to_front() if hasattr(win, "bring_to_front") else None
-        return f"✅ Focused window: '{window_title}'"
-    except Exception as e:
-        return f"❌ Focus failed: {e}"
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists", timeout=5)
+            win.set_focus()
+            return f"✅ Focused window: '{window_title}'"
+        except Exception as e:
+            return f"❌ Focus failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Menu navigation ───────────────────────────────────────────────────────────
@@ -268,22 +330,25 @@ def win_uia_focus(
         "Provide the menu path as arrow-separated items, e.g. 'File->Save As' or 'Edit->Find->Find Next'."
     ),
 )
-def win_uia_menu(
+async def win_uia_menu(
     window_title: str = Field(..., description="Partial or full title of the window."),
     menu_path: str = Field(
         ...,
         description="Menu path separated by '->'. Example: 'File->Save As', 'View->Zoom->100%'.",
     ),
 ) -> str:
-    try:
-        win = _find_window(window_title)
-        win.wait("exists visible", timeout=5)
-        win.set_focus()
-        items = [item.strip() for item in menu_path.split("->")]
-        win.menu_select("->".join(items))
-        return f"✅ Navigated menu: {menu_path}"
-    except Exception as e:
-        return f"❌ Menu navigation failed: {e}"
+    def _impl() -> str:
+        try:
+            win = _find_window(window_title)
+            win.wait("exists visible", timeout=5)
+            win.set_focus()
+            items = [item.strip() for item in menu_path.split("->")]
+            win.menu_select("->".join(items))
+            return f"✅ Navigated menu: {menu_path}"
+        except Exception as e:
+            return f"❌ Menu navigation failed: {e}"
+
+    return await _on_uia_thread(_impl)
 
 
 # ── Get window list ───────────────────────────────────────────────────────────
@@ -293,21 +358,22 @@ def win_uia_menu(
     annotations={"title": "List UI Automation Windows", "readOnlyHint": True, "destructiveHint": False},
     description="List all open windows that UI Automation can see, with their titles.",
 )
-def win_uia_list_windows() -> str:
-    try:
-        desktop = _get_desktop()
-        windows = desktop.windows()
-        results = []
-        for w in windows:
-            try:
-                title = w.window_text()
-                if title and title.strip():
-                    results.append(title.strip())
-            except Exception:
-                pass
-        seen = list(dict.fromkeys(results))
-        if not seen:
-            return "No windows found."
-        return f"Open windows ({len(seen)}):\n\n" + "\n".join(f"• {t}" for t in seen)
-    except Exception as e:
-        return f"❌ Could not list windows: {e}"
+async def win_uia_list_windows() -> str:
+    def _impl() -> str:
+        try:
+            results = []
+            for w in _get_desktop().windows():
+                try:
+                    title = w.window_text()
+                    if title and title.strip():
+                        results.append(title.strip())
+                except Exception:
+                    pass
+            seen = list(dict.fromkeys(results))
+            if not seen:
+                return "No windows found."
+            return f"Open windows ({len(seen)}):\n\n" + "\n".join(f"• {t}" for t in seen)
+        except Exception as e:
+            return f"❌ Could not list windows: {e}"
+
+    return await _on_uia_thread(_impl)

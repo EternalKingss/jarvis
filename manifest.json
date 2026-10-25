@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "windows-jarvis",
   "display_name": "Windows Jarvis",
-  "version": "1.0.0",
-  "description": "Control your Windows PC from Claude: run commands, manage files and apps, read the screen and automate any app's UI.",
-  "long_description": "Windows Jarvis gives Claude hands-on control of a Windows 10/11 machine through 45 local tools: PowerShell/CMD commands and background jobs, opening and closing apps, files and folders, system info and processes, volume and media keys, clipboard, screenshots and OCR, and Microsoft UI Automation (click, type, read and select controls in any app).\n\nEverything runs locally on your computer. Jarvis sends nothing to any server and collects no data. Tools that change or delete things (commands, deleting files, killing processes, shutdown) are marked destructive so Claude asks before running them.\n\nOCR (win_read_screen_text) needs the free Tesseract engine installed separately; every other tool works out of the box.",
+  "version": "1.1.0",
+  "description": "Control your Windows PC from Claude: run commands, manage files, apps and windows, read the screen, and automate any app's UI.",
+  "long_description": "Windows Jarvis gives Claude hands-on control of a Windows 10/11 machine through 52 local tools: PowerShell/CMD commands and background jobs, apps and windows (open, close, snap, move), files and folders, system info and processes, volume and media keys, clipboard, screenshots Claude can see, built-in Windows OCR, Wi-Fi and Bluetooth, desktop notifications, and Microsoft UI Automation (click, type, read and select controls in any app).\n\nEverything runs locally on your computer. Jarvis sends nothing to any server and collects no data. Deleted files go to the Recycle Bin. Shutdown, restart, killing processes and permanent delete stay off until you enable them in the extension settings, and every tool that can change or delete things is marked destructive so Claude asks first.",
   "author": {
     "name": "EternalKingss",
     "url": "https://github.com/EternalKingss"
@@ -27,7 +27,27 @@
         "--directory",
         "${__dirname}",
         "jarvis-mcp/server.py"
-      ]
+      ],
+      "env": {
+        "JARVIS_ALLOW_POWER_ACTIONS": "${user_config.allow_power_actions}",
+        "JARVIS_ALLOW_PERMANENT_DELETE": "${user_config.allow_permanent_delete}"
+      }
+    }
+  },
+  "user_config": {
+    "allow_power_actions": {
+      "type": "boolean",
+      "title": "Allow shutdown, restart and killing processes",
+      "description": "Lets Claude shut down or restart the PC and force-quit processes. Off by default.",
+      "default": false,
+      "required": false
+    },
+    "allow_permanent_delete": {
+      "type": "boolean",
+      "title": "Allow permanent delete (skip the Recycle Bin)",
+      "description": "Lets Claude erase files for good when it asks to. Off by default: deleted files go to the Recycle Bin.",
+      "default": false,
+      "required": false
     }
   },
   "tools": [
@@ -49,7 +69,7 @@
     },
     {
       "name": "win_list_running_apps",
-      "description": "List all currently running processes sorted by memory usage, with PID, CPU%, and RAM."
+      "description": "List the running processes using the most memory, with PID, CPU%, and RAM."
     },
     {
       "name": "win_switch_to_app",
@@ -77,7 +97,7 @@
     },
     {
       "name": "win_take_screenshot",
-      "description": "Capture the current screen and save it as a PNG file."
+      "description": "Capture the current screen, save it as a PNG file, and return the image so you can see what is on screen."
     },
     {
       "name": "win_get_network_info",
@@ -129,7 +149,7 @@
     },
     {
       "name": "win_delete_file",
-      "description": "Delete a file or folder permanently."
+      "description": "Delete a file or folder by moving it to the Recycle Bin, so it can be restored."
     },
     {
       "name": "win_get_file_info",
@@ -157,7 +177,7 @@
     },
     {
       "name": "win_read_screen_text",
-      "description": "Capture the current screen and extract all visible text using OCR (Tesseract)."
+      "description": "Capture the current screen and extract all visible text using the built-in Windows OCR engine."
     },
     {
       "name": "win_get_active_window",
@@ -210,6 +230,34 @@
     {
       "name": "win_uia_list_windows",
       "description": "List all open windows that UI Automation can see, with their titles."
+    },
+    {
+      "name": "win_arrange_window",
+      "description": "Minimize, maximize, restore, snap to the left or right half of the screen, center, or move and resize a window."
+    },
+    {
+      "name": "win_notify",
+      "description": "Show a Windows desktop notification (toast) to the user, for a reminder or when something finishes."
+    },
+    {
+      "name": "win_wifi_networks",
+      "description": "List saved Wi-Fi networks (ones you can connect to) and nearby networks with signal strength."
+    },
+    {
+      "name": "win_wifi_connect",
+      "description": "Connect to a saved Wi-Fi network."
+    },
+    {
+      "name": "win_wifi_disconnect",
+      "description": "Disconnect from the current Wi-Fi network."
+    },
+    {
+      "name": "win_bluetooth_devices",
+      "description": "List paired Bluetooth devices and whether each one is connected right now."
+    },
+    {
+      "name": "win_bluetooth_power",
+      "description": "Turn the Bluetooth radio on or off."
     }
   ],
   "keywords": [
@@ -219,7 +267,9 @@
     "files",
     "ui-automation",
     "system",
-    "desktop"
+    "desktop",
+    "ocr",
+    "wifi"
   ],
   "license": "MIT",
   "privacy_policies": [

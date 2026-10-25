@@ -1,6 +1,6 @@
 # Windows Jarvis Privacy Policy
 
-Last updated: 2026-10-24
+Last updated: 2026-10-25
 
 Windows Jarvis is a local MCP server. It runs on your own computer as a
 subprocess of Claude Desktop and talks to Claude only over standard input and
@@ -15,9 +15,11 @@ to the developer or to any third party.
 ## What Jarvis reads
 
 When Claude calls a tool, Jarvis reads what that tool needs from your machine,
-for example a file you asked about, the clipboard, the text on screen, the list
-of running processes, or the UI of an open window. The result is returned to
-Claude as part of your conversation. How Anthropic handles conversation data is
+for example a file you asked about, the clipboard, the text on screen, a
+screenshot, the list of running processes, nearby Wi-Fi networks, paired
+Bluetooth devices, or the UI of an open window. The result is returned to
+Claude as part of your conversation. Screen text recognition (OCR) uses the
+engine built into Windows and runs entirely on your PC. How Anthropic handles conversation data is
 covered by [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy).
 
 ## What Jarvis stores on your computer
@@ -25,10 +27,12 @@ covered by [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy)
 - **Screenshots** from `win_take_screenshot` are saved to
   `Pictures\Jarvis Screenshots` (or the path you choose).
 - **Background job output** from `win_start_job` is written to
-  `%TEMP%\jarvis_jobs` so it can be read back while the job runs. These files
-  stay until you or Windows clear the temp folder.
-- **Temporary scripts** used to run PowerShell commands are deleted as soon as
-  the command finishes.
+  `%TEMP%\jarvis_jobs` so it can be read back while the job runs. Jarvis
+  deletes each job's output after 24 hours.
+- **Temporary files** (PowerShell scripts and the screen capture used for OCR)
+  are deleted as soon as the command finishes.
+- **Deleted files** go to the Windows Recycle Bin unless you have enabled
+  permanent delete in the extension settings.
 - **Command history is off.** Jarvis does not record the commands it runs. If
   you set the `JARVIS_COMMAND_LOG` environment variable to a file path, it will
   append each command to that file, on your machine only.

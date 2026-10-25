@@ -6,17 +6,31 @@ on:
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is where Jarvis actually runs; Ubuntu checks the server still
+        # imports and registers cleanly where the Windows-only code is skipped.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Lint
+        run: uv run --group dev ruff check jarvis-mcp tests
+      - name: Tests
+        run: uv run --group dev pytest tests -q
+
+  bundle:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-      - name: Install dependencies
+          node-version: "22"
+      - name: Validate manifest and pack
         run: |
-          pip install -r jarvis-mcp/requirements.txt
-          pip install pytest ruff
-      - name: Lint
-        run: ruff check jarvis-mcp tests
-      - name: Smoke test
-        run: pytest tests -q
+          npx --yes @anthropic-ai/mcpb validate manifest.json
+          npx --yes @anthropic-ai/mcpb pack . windows-jarvis.mcpb

@@ -3,10 +3,15 @@
 import asyncio
 import logging
 import os
+import tempfile
+import uuid
 from mcp_instance import mcp
-from utils.shell import run_command_async
+from utils import winrt
+from utils.shell import run_command, run_command_async
 
 logger = logging.getLogger(__name__)
+
+_MAX_OCR_CHARS = 8000
 
 
 @mcp.tool(
@@ -14,36 +19,38 @@ logger = logging.getLogger(__name__)
     annotations={"title": "Read Screen Text (OCR)", "readOnlyHint": True, "destructiveHint": False},
 )
 async def win_read_screen_text() -> str:
-    """Capture the current screen and extract all visible text using OCR (Tesseract)."""
+    """Capture the current screen and extract all visible text using the built-in Windows OCR engine."""
     def _impl() -> str:
         try:
             from PIL import ImageGrab
-            import pytesseract
+        except ImportError:
+            return "Pillow is missing. Reinstall the extension, or run: pip install Pillow"
 
-            for tp in [
-                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-                os.path.expanduser(r"~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
-            ]:
-                if os.path.exists(tp):
-                    pytesseract.pytesseract.tesseract_cmd = tp
-                    break
-
-            img = ImageGrab.grab()
-            text = pytesseract.image_to_string(img).strip()
-            if not text:
-                return "Screen captured but no text detected."
-            return f"Screen text ({len(text)} chars):\n\n{text[:8000]}" + (
-                f"\n\n[Truncated — {len(text) - 8000} more chars]" if len(text) > 8000 else ""
-            )
-        except ImportError as e:
-            return (
-                f"Missing dependency: {e}\n"
-                "Install: pip install Pillow pytesseract\n"
-                "Then install Tesseract: https://github.com/UB-Mannheim/tesseract/wiki"
-            )
+        path = os.path.join(tempfile.gettempdir(), f"jarvis_ocr_{uuid.uuid4().hex[:8]}.png")
+        try:
+            ImageGrab.grab().save(path)
+            result = run_command(winrt.ocr_script(path), shell="powershell", timeout=60)
         except Exception as e:
-            return f"OCR failed: {e}"
+            return f"OCR failed: {type(e).__name__}: {e}"
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+        if "NO_OCR_LANGUAGE" in result["stderr"]:
+            return (
+                "Windows OCR has no language pack installed. Add one in Settings > Time & language > "
+                "Language & region > (your language) > Language options > Optical character recognition."
+            )
+        if not result["success"]:
+            return f"OCR failed: {result['stderr'] or 'no error text'}"
+
+        text = result["stdout"].strip()
+        if not text:
+            return "Screen captured but no text detected."
+        suffix = f"\n\n[Truncated, {len(text) - _MAX_OCR_CHARS} more chars]" if len(text) > _MAX_OCR_CHARS else ""
+        return f"Screen text ({len(text)} chars):\n\n{text[:_MAX_OCR_CHARS]}{suffix}"
 
     return await asyncio.to_thread(_impl)
 

@@ -15,13 +15,17 @@ Design notes:
     caller "tails" the job by calling win_job_output repeatedly.
   * Jobs live in a module-level registry for the lifetime of the MCP server
     process, so they persist across tool calls.
+  * Output folders older than JOB_RETENTION_SECONDS are deleted at startup and
+    whenever a new job starts, so command output does not pile up in %TEMP%.
 """
 
 import asyncio
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from typing import Literal, Optional
@@ -32,14 +36,37 @@ from utils.shell import (
     _resolve_working_dir,
     build_shell_args,
     clean_clixml,
+    run_command,
 )
+from utils.winrt import toast_script
 
 logger = logging.getLogger(__name__)
 
 _JOBS_ROOT = os.path.join(tempfile.gettempdir(), "jarvis_jobs")
 _MAX_OUTPUT_CHARS = 8000
+JOB_RETENTION_SECONDS = 24 * 60 * 60
 
 _jobs: dict[str, "Job"] = {}
+
+
+def prune_old_jobs(max_age: float = JOB_RETENTION_SECONDS) -> int:
+    """Delete job output folders older than max_age, except running jobs. Returns the count removed."""
+    if not os.path.isdir(_JOBS_ROOT):
+        return 0
+    cutoff = time.time() - max_age
+    removed = 0
+    for entry in os.scandir(_JOBS_ROOT):
+        job = _jobs.get(entry.name)
+        if not entry.is_dir() or (job is not None and job.running):
+            continue
+        try:
+            if entry.stat().st_mtime < cutoff:
+                shutil.rmtree(entry.path, ignore_errors=True)
+                _jobs.pop(entry.name, None)
+                removed += 1
+        except OSError:
+            pass
+    return removed
 
 
 class Job:
@@ -129,6 +156,7 @@ def start_job(
     command: str,
     shell: Literal["powershell", "cmd"] = "powershell",
     working_dir: Optional[str] = None,
+    notify: bool = False,
 ) -> dict:
     """Launch a command as a background job. Returns immediately with a job_id."""
     try:
@@ -136,6 +164,7 @@ def start_job(
     except NotADirectoryError as e:
         return {"success": False, "error": str(e)}
 
+    prune_old_jobs()
     job_id = uuid.uuid4().hex[:8]
     job = Job(job_id, command, shell, cwd)
     os.makedirs(job.dir, exist_ok=True)
@@ -164,10 +193,23 @@ def start_job(
         return {"success": False, "error": f"{type(e).__name__}: {e}"}
 
     _jobs[job_id] = job
+    if notify:
+        threading.Thread(target=_notify_when_done, args=(job,), daemon=True).start()
     result = job.summary()
     result["success"] = True
     result["pid"] = job.proc.pid
     return result
+
+
+def _notify_when_done(job: "Job") -> None:
+    """Wait for a job to exit, then show a Windows notification (unless it was stopped)."""
+    job.proc.wait()
+    job.poll()
+    if job.killed:
+        return
+    outcome = "finished" if job.exit_code == 0 else f"failed (exit {job.exit_code})"
+    cmd = job.command if len(job.command) <= 80 else job.command[:77] + "..."
+    run_command(toast_script(f"Jarvis job {outcome}", cmd), shell="powershell", timeout=15)
 
 
 def job_output(job_id: str, from_start: bool = False) -> dict:
@@ -216,11 +258,14 @@ def list_jobs() -> dict:
     return {"success": True, "jobs": [job.summary() for job in _jobs.values()]}
 
 
+prune_old_jobs()
+
+
 # ── async wrappers ──────────────────────────────────────────────────────────
 # Tool handlers run on the server event loop; keep file/subprocess work off it.
 
-async def start_job_async(command, shell="powershell", working_dir=None) -> dict:
-    return await asyncio.to_thread(start_job, command, shell, working_dir)
+async def start_job_async(command, shell="powershell", working_dir=None, notify=False) -> dict:
+    return await asyncio.to_thread(start_job, command, shell, working_dir, notify)
 
 
 async def job_output_async(job_id, from_start=False) -> dict:

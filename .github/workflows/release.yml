@@ -1,0 +1,41 @@
+name: Release
+
+# Push a tag like v1.1.0 and this builds windows-jarvis-<version>.mcpb and
+# attaches it to the GitHub release (creating the release if needed).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check the tag matches manifest.json
+        run: |
+          version=$(node -p "require('./manifest.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match manifest version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build bundle
+        run: |
+          npx --yes @anthropic-ai/mcpb validate manifest.json
+          npx --yes @anthropic-ai/mcpb pack . "windows-jarvis-$VERSION.mcpb"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "windows-jarvis-$VERSION.mcpb" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "windows-jarvis-$VERSION.mcpb" \
+              --title "Windows Jarvis v$VERSION" --generate-notes
+          fi

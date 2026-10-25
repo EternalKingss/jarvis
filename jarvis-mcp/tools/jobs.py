@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 async def win_start_job(
     command: str = Field(..., description="Command to run in the background. E.g. 'pip install -r requirements.txt', 'npm run dev', 'python train.py'."),
     shell: Literal["powershell", "cmd"] = Field(default="powershell", description="Shell to use: 'powershell' (default) or 'cmd'"),
-    working_dir: Optional[str] = Field(default=None, description="Directory to run in. E.g. 'C:\\\\Users\\\\Eternal\\\\project'. Defaults to user home. Errors if it does not exist."),
+    working_dir: Optional[str] = Field(default=None, description="Directory to run in. E.g. 'C:\\\\Users\\\\me\\\\project'. Defaults to user home. Errors if it does not exist."),
+    notify: bool = Field(default=False, description="Show a Windows notification when the job finishes (default False)."),
 ) -> str:
     """
     Launch a command as a background job and return a job_id immediately.
@@ -45,7 +46,7 @@ async def win_start_job(
     watchers. Poll progress and completion with win_job_output(job_id); stop it
     with win_stop_job(job_id).
     """
-    result = await start_job_async(command=command, shell=shell, working_dir=working_dir)
+    result = await start_job_async(command=command, shell=shell, working_dir=working_dir, notify=notify)
     return format_job(result)
 
 
